@@ -1,9 +1,7 @@
-import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Copy, Check, LogOut, Play } from "lucide-react";
 import { useFlockStore } from "@/store/flockStore";
 import { useAuthStore } from "@/store/authStore";
-import GooseAvatar from "@/components/goose/GooseAvatar";
 import Button from "@/components/ui/Button";
 import { RoomStatus, StudyStyle } from "@waddle/shared";
 import { getSocket } from "@/lib/socket";
