@@ -6,7 +6,7 @@ import {
 import Button from "@/components/ui/Button";
 import { useAuthStore } from "@/store/authStore";
 import { TaskCategory } from "@waddle/shared";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase"; // used for fetching tasks
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -219,23 +219,12 @@ export default function DailyTasks() {
   // ── Photo upload + Gemini verification ─────────────────────────────────────
   const handlePhotoUpload = useCallback(
     async (task: Task, file: File) => {
-      setUploads((prev) => ({ ...prev, [task.id]: { status: "uploading", preview: URL.createObjectURL(file) } }));
+      setUploads((prev) => ({ ...prev, [task.id]: { status: "uploading" } }));
 
       try {
-        // 1. Read as base64 for Gemini
+        // Read as base64 — server handles storage upload + Gemini verification
         const { base64, mimeType } = await readFileAsBase64(file);
 
-        // 2. Upload to Supabase Storage
-        const ext = file.name.split(".").pop() ?? "jpg";
-        const path = `task-verifications/${task.id}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("task-photos")
-          .upload(path, file, { upsert: true });
-        if (uploadError) throw new Error("Photo upload failed: " + uploadError.message);
-
-        const { data: urlData } = supabase.storage.from("task-photos").getPublicUrl(path);
-
-        // 3. Send to server for Gemini verification
         setUploads((prev) => ({ ...prev, [task.id]: { ...prev[task.id], status: "verifying" } }));
 
         const res = await fetch("/api/tasks/verify", {
@@ -244,12 +233,7 @@ export default function DailyTasks() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session?.access_token}`,
           },
-          body: JSON.stringify({
-            taskId: task.id,
-            photoUrl: urlData.publicUrl,
-            imageData: base64,
-            mimeType,
-          }),
+          body: JSON.stringify({ taskId: task.id, imageData: base64, mimeType }),
         });
 
         if (!res.ok) {
@@ -257,10 +241,11 @@ export default function DailyTasks() {
           throw new Error(err.reason || err.error || "Gemini couldn't verify this photo");
         }
 
+        const { data } = await res.json();
         setUploads((prev) => ({ ...prev, [task.id]: { ...prev[task.id], status: "verified" } }));
         setTasks((prev) =>
           prev.map((t) =>
-            t.id === task.id ? { ...t, completed: true, photoUrl: urlData.publicUrl } : t
+            t.id === task.id ? { ...t, completed: true, photoUrl: data.photoUrl } : t
           )
         );
       } catch (err) {
