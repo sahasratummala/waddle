@@ -70,7 +70,6 @@ export default function FlockPartyRoom() {
   }
 
   const isHost = room.hostId === user?.id;
-  const myParticipant = room.participants.find((p) => p.userId === user?.id);
   const isStudying = room.status === RoomStatus.STUDYING;
   const isOnBreak = room.status === RoomStatus.BREAK;
   const isInGame = room.status === RoomStatus.GAME;

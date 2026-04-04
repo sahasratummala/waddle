@@ -37,7 +37,7 @@ async function fetchProfile(userId: string): Promise<User | null> {
   };
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set, _get) => ({
   user: null,
   supabaseUser: null,
   session: null,

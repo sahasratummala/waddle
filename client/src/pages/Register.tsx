@@ -17,10 +17,8 @@ function PasswordStrength({ password }: { password: string }) {
     <div className="mt-2 flex flex-col gap-1">
       {checks.map(({ label, pass }) => (
         <div key={label} className="flex items-center gap-1.5 text-xs">
-          <CheckCircle
-            className={`w-3.5 h-3.5 ${pass ? "text-accent" : "text-white/20"}`}
-          />
-          <span className={pass ? "text-white/60" : "text-white/30"}>{label}</span>
+          <CheckCircle className="w-3.5 h-3.5" style={{ color: pass ? "#7E9DA2" : "rgba(229,222,202,0.2)" }} />
+          <span style={{ color: pass ? "rgba(229,222,202,0.65)" : "rgba(229,222,202,0.3)" }}>{label}</span>
         </div>
       ))}
     </div>
@@ -58,16 +56,14 @@ export default function Register() {
 
     try {
       await signUp(email.trim(), password, username.trim());
-      // If session was created immediately, navigate to dashboard
       const { user } = useAuthStore.getState();
       if (user) {
         navigate("/dashboard");
       } else {
-        // Email confirmation required
         setEmailSent(true);
       }
     } catch {
-      // error is in the store
+      // error in store
     }
   }
 
@@ -77,14 +73,14 @@ export default function Register() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="relative z-10 w-full max-w-sm text-center">
-          <div className="w-16 h-16 rounded-full bg-accent/20 border-2 border-accent/40 flex items-center justify-center mx-auto mb-5">
-            <CheckCircle className="w-8 h-8 text-accent" />
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
+            style={{ background: "rgba(126,157,162,0.2)", border: "2px solid rgba(126,157,162,0.45)" }}>
+            <CheckCircle className="w-8 h-8 text-ocean" />
           </div>
-          <h1 className="text-2xl font-display font-extrabold text-white mb-3">
-            Check your email!
-          </h1>
-          <p className="text-white/55 text-sm mb-6">
-            We sent a confirmation link to <strong className="text-white">{email}</strong>.
+          <h1 className="text-2xl font-display font-extrabold text-cream mb-3">Check your email!</h1>
+          <p className="text-sm mb-6" style={{ color: "rgba(229,222,202,0.55)" }}>
+            We sent a confirmation link to{" "}
+            <strong className="text-cream">{email}</strong>.
             Click the link to activate your account and start waddling.
           </p>
           <Link to="/login">
@@ -98,24 +94,31 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 -left-40 w-80 h-80 bg-secondary/5 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl"
+          style={{ background: "rgba(137,132,51,0.07)" }} />
+        <div className="absolute bottom-0 -left-40 w-80 h-80 rounded-full blur-3xl"
+          style={{ background: "rgba(126,157,162,0.06)" }} />
       </div>
 
       <div className="relative z-10 w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <Link to="/" className="flex items-center gap-2.5 group mb-2">
-            <div className="w-12 h-12 rounded-full bg-primary/20 border-2 border-primary/40 flex items-center justify-center group-hover:border-primary transition-colors">
-              <Bird className="w-6 h-6 text-primary" />
+          <Link to="/" className="flex items-center gap-2.5 group mb-3">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center transition-all group-hover:scale-105"
+              style={{ background: "rgba(137,132,51,0.18)", border: "2px solid rgba(137,132,51,0.45)" }}>
+              <Bird className="w-7 h-7 text-avocado" />
             </div>
           </Link>
-          <h1 className="text-2xl font-display font-extrabold text-white">Hatch your egg</h1>
-          <p className="text-white/50 text-sm mt-1">Create your free Waddle account</p>
+          <h1 className="text-2xl font-display font-extrabold text-cream">Hatch your egg</h1>
+          <p className="text-sm mt-1" style={{ color: "rgba(229,222,202,0.5)" }}>
+            Create your free Waddle account
+          </p>
         </div>
 
-        <div className="bg-background-light border border-white/10 rounded-2xl p-7 shadow-xl shadow-black/30">
+        <div className="rounded-2xl p-7 shadow-xl shadow-black/40"
+          style={{ background: "#45441A", border: "1px solid rgba(229,222,202,0.1)" }}>
           {displayError && (
-            <div className="flex items-start gap-2.5 p-3 mb-5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div className="flex items-start gap-2.5 p-3 mb-5 rounded-lg text-sm"
+              style={{ background: "rgba(192,57,43,0.12)", border: "1px solid rgba(192,57,43,0.25)", color: "#E88080" }}>
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{displayError}</span>
             </div>
@@ -123,7 +126,7 @@ export default function Register() {
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-1.5">
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "rgba(229,222,202,0.7)" }}>
                 Username
               </label>
               <input
@@ -141,7 +144,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-1.5">
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "rgba(229,222,202,0.7)" }}>
                 Email address
               </label>
               <input
@@ -156,7 +159,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-1.5">
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "rgba(229,222,202,0.7)" }}>
                 Password
               </label>
               <div className="relative">
@@ -173,7 +176,8 @@ export default function Register() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-3 flex items-center text-white/40 hover:text-white/80 transition-colors"
+                  className="absolute inset-y-0 right-3 flex items-center transition-colors"
+                  style={{ color: "rgba(229,222,202,0.4)" }}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -193,20 +197,23 @@ export default function Register() {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-white/30 mt-4">
+          <p className="text-center text-xs mt-4" style={{ color: "rgba(229,222,202,0.3)" }}>
             By creating an account, you agree to our Terms and Privacy Policy.
           </p>
 
-          <p className="text-center text-sm text-white/40 mt-4">
+          <p className="text-center text-sm mt-4" style={{ color: "rgba(229,222,202,0.4)" }}>
             Already have an account?{" "}
-            <Link to="/login" className="text-primary hover:text-primary-300 font-medium transition-colors">
+            <Link to="/login" className="text-avocado font-medium hover:text-primary-300 transition-colors">
               Sign in
             </Link>
           </p>
         </div>
 
-        <p className="text-center text-xs text-white/20 mt-5">
-          <Link to="/" className="hover:text-white/40 transition-colors">← Back to home</Link>
+        <p className="text-center text-xs mt-5">
+          <Link to="/" style={{ color: "rgba(229,222,202,0.25)" }}
+            className="hover:text-cream/50 transition-colors">
+            ← Back to home
+          </Link>
         </p>
       </div>
     </div>
