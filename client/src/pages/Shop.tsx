@@ -7,17 +7,7 @@ import Card, { CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { GooseStage, GOOSE_EVOLUTION_THRESHOLDS, NEXT_STAGE } from "@waddle/shared";
 import type { Accessory } from "@waddle/shared";
-
-const MOCK_ACCESSORIES: Accessory[] = [
-  { id: "hat-1", name: "Straw Hat", description: "A classic summer hat", cost: 50, category: "hat", unlockedAtStage: GooseStage.EGG },
-  { id: "hat-2", name: "Top Hat", description: "Very distinguished", cost: 120, category: "hat", unlockedAtStage: GooseStage.HATCHLING },
-  { id: "hat-3", name: "Party Hat", description: "Let's celebrate!", cost: 80, category: "hat", unlockedAtStage: GooseStage.EGG },
-  { id: "scarf-1", name: "Cozy Scarf", description: "Warm and woolly", cost: 60, category: "scarf", unlockedAtStage: GooseStage.HATCHLING },
-  { id: "glasses-1", name: "Reading Glasses", description: "For the studious goose", cost: 75, category: "glasses", unlockedAtStage: GooseStage.GOSLING },
-  { id: "glasses-2", name: "Sunglasses", description: "Cool vibes only", cost: 100, category: "glasses", unlockedAtStage: GooseStage.GOSLING },
-  { id: "bag-1", name: "Study Backpack", description: "Carries all your books", cost: 150, category: "bag", unlockedAtStage: GooseStage.GOSLING },
-  { id: "bag-2", name: "Golden Briefcase", description: "For the executive goose", cost: 300, category: "bag", unlockedAtStage: GooseStage.GOOSE },
-];
+import { ACCESSORIES } from "@/data/accessories";
 
 const STAGE_ORDER: GooseStage[] = [
   GooseStage.EGG,
@@ -65,8 +55,8 @@ export default function Shop() {
 
   const filteredAccessories =
     selectedCategory === "all"
-      ? MOCK_ACCESSORIES
-      : MOCK_ACCESSORIES.filter((a) => a.category === selectedCategory);
+      ? ACCESSORIES
+      : ACCESSORIES.filter((a) => a.category === selectedCategory);
 
   function isLocked(accessory: Accessory): boolean {
     const stageIdx = STAGE_ORDER.indexOf(stage);
@@ -91,7 +81,7 @@ export default function Shop() {
     setEvolvingLoading(false);
   }
 
-  const categories: Array<"all" | Category> = ["all", "hat", "scarf", "glasses", "bag"];
+  const categories: Array<"all" | Category> = ["all", "hat", "scarf", "glasses", "bag", "other"];
 
   return (
     <div className="flex flex-col gap-6 animate-in">
@@ -106,7 +96,6 @@ export default function Shop() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Goose preview + evolution */}
         <div className="lg:col-span-1 flex flex-col gap-4">
-          {/* Goose preview */}
           <Card variant="glass" padding="lg">
             <div className="flex flex-col items-center text-center">
               <GooseAvatar
@@ -136,23 +125,18 @@ export default function Shop() {
               <Star className="w-4 h-4 text-primary" />
             </CardHeader>
             <CardContent>
-              {/* Progress through stages */}
               <div className="flex items-center justify-between mb-4">
                 {STAGE_ORDER.map((s, i) => {
                   const reached = STAGE_ORDER.indexOf(stage) >= i;
                   return (
                     <div key={s} className="flex flex-col items-center gap-1">
-                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${
-                        reached ? "border-primary bg-primary/20" : "border-white/20"
-                      }`}>
+                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${reached ? "border-primary bg-primary/20" : "border-white/20"
+                        }`}>
                         <GooseAvatar stage={s} size="xs" />
                       </div>
                       <span className={`text-xs ${reached ? "text-primary" : "text-white/30"}`}>
                         {STAGE_NAMES[s][0]}
                       </span>
-                      {i < 3 && (
-                        <div className={`absolute h-0.5 w-8 mt-4 ml-8 ${reached && STAGE_ORDER.indexOf(stage) > i ? "bg-primary" : "bg-white/15"}`} />
-                      )}
                     </div>
                   );
                 })}
@@ -205,11 +189,10 @@ export default function Shop() {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  selectedCategory === cat
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all capitalize ${selectedCategory === cat
                     ? "bg-primary/20 text-primary border border-primary/40"
                     : "bg-white/5 text-white/55 border border-white/10 hover:border-white/25"
-                }`}
+                  }`}
               >
                 {cat === "all" ? "All" : CATEGORY_LABELS[cat]}
               </button>
@@ -227,37 +210,34 @@ export default function Shop() {
               return (
                 <div
                   key={accessory.id}
-                  className={`relative flex flex-col p-4 rounded-2xl border transition-all ${
-                    equipped
+                  className={`relative flex flex-col p-4 rounded-2xl border transition-all ${equipped
                       ? "border-accent/50 bg-accent/8"
                       : locked
-                      ? "border-white/8 bg-white/3 opacity-60"
-                      : "border-white/10 bg-background-card hover:border-white/25"
-                  }`}
+                        ? "border-white/8 bg-white/3 opacity-60"
+                        : "border-white/10 bg-background-card hover:border-white/25"
+                    }`}
                 >
-                  {/* Locked overlay */}
                   {locked && (
                     <div className="absolute top-2 right-2">
                       <Lock className="w-3.5 h-3.5 text-white/40" />
                     </div>
                   )}
-
-                  {/* Equipped badge */}
                   {equipped && (
                     <div className="absolute top-2 right-2">
                       <Check className="w-3.5 h-3.5 text-accent" />
                     </div>
                   )}
 
-                  {/* Accessory preview placeholder */}
-                  <div className="w-full aspect-square rounded-xl bg-background-surface mb-3 flex items-center justify-center">
-                    <span className="text-3xl">
-                      {accessory.category === "hat" && "🎩"}
-                      {accessory.category === "scarf" && "🧣"}
-                      {accessory.category === "glasses" && "👓"}
-                      {accessory.category === "bag" && "💼"}
-                      {accessory.category === "other" && "✨"}
-                    </span>
+                  <div className="w-full aspect-square rounded-xl bg-background-surface mb-3 flex items-center justify-center overflow-hidden p-2">
+                    {accessory.imageUrl ? (
+                      <img
+                        src={accessory.imageUrl}
+                        alt={accessory.name}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-3xl">✨</span>
+                    )}
                   </div>
 
                   <h3 className="text-white font-medium text-sm mb-0.5">{accessory.name}</h3>
