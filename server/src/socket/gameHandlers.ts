@@ -11,28 +11,19 @@ import type {
   PictionaryGuessPayload,
   GameResult,
 } from "@waddle/shared";
+import { randomPictionaryWord } from "../lib/pictionaryWords";
 
-// Track active game states per room
-interface GameSession {
+export interface GameSession {
   gameType: GameType;
   startedAt: number;
-  word?: string; // Pictionary
-  drawer?: string; // Pictionary userId
-  scores: Map<string, number>; // userId → score
-  completed: Set<string>; // userIds who finished
+  word?: string;
+  winner?: string;
+  drawer?: string;
+  scores: Map<string, number>;
+  completed: Set<string>;
 }
 
-const activeGames = new Map<string, GameSession>();
-
-const PICTIONARY_WORDS = [
-  "goose", "pond", "study", "timer", "book", "pencil", "coffee",
-  "laptop", "headphones", "clock", "sleep", "exercise", "water",
-  "sunrise", "library", "notes", "flashcard", "homework",
-];
-
-function randomWord(): string {
-  return PICTIONARY_WORDS[Math.floor(Math.random() * PICTIONARY_WORDS.length)];
-}
+export const activeGames = new Map<string, GameSession>();
 
 function calculateGamePoints(gameType: GameType, _score: number, rank: number): number {
   const base: Record<GameType, number> = {
@@ -47,7 +38,36 @@ function calculateGamePoints(gameType: GameType, _score: number, rank: number): 
 export function registerGameHandlers(io: Server, socket: Socket) {
   const userId = (socket as Socket & { userId?: string }).userId;
 
-  // game-start (host initiates a break game)
+  socket.on("game:start", async (payload: { roomCode: string; game: string }) => {
+    const roomCode = payload.roomCode?.toUpperCase();
+    if (!roomCode) return;
+
+    const room = await getRoomByCode(roomCode);
+    if (!room || room.hostId !== userId) return;
+
+    const word = randomPictionaryWord();
+    const session: GameSession = {
+      gameType: GameType.PICTIONARY,
+      startedAt: Date.now(),
+      word,
+      scores: new Map(),
+      completed: new Set(),
+    };
+    activeGames.set(roomCode, session);
+
+    io.to(roomCode).emit("pictionary:word", { word });
+    io.to(roomCode).emit("game:started", { game: payload.game });
+  });
+
+  socket.on("pictionary:request-word", (payload: { roomCode: string }) => {
+    const roomCode = payload.roomCode?.toUpperCase();
+    if (!roomCode) return;
+    const session = activeGames.get(roomCode);
+    if (session?.word) {
+      socket.emit("pictionary:word", { word: session.word });
+    }
+  });
+
   socket.on("game-start", async (payload: GameStartPayload) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode) return;
@@ -66,15 +86,13 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     let gameData: Record<string, unknown> = {};
 
     if (gameType === GameType.PICTIONARY) {
-      session.word = randomWord();
-      // Pick a random non-host participant as drawer
+      session.word = randomPictionaryWord();
       const nonHosts = room.participants.filter((p) => !p.isHost);
       session.drawer =
         nonHosts.length > 0
           ? nonHosts[Math.floor(Math.random() * nonHosts.length)].userId
           : userId;
 
-      // Tell drawer the word privately
       const drawerSocket = [...io.sockets.sockets.values()].find(
         (s) => (s as Socket & { userId?: string }).userId === session.drawer
       );
@@ -82,9 +100,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         drawerSocket.emit("pictionary-word", { word: session.word });
       }
 
-      gameData = { drawer: session.drawer, wordLength: session.word.length };
+      gameData = { drawer: session.drawer, wordLength: session.word!.length };
     } else if (gameType === GameType.MAZE) {
-      // Simple 8x8 maze seed
       gameData = { seed: Math.floor(Math.random() * 1000), size: 8 };
     } else if (gameType === GameType.BREADCRUMB) {
       gameData = { duration: 30, crumbCount: 20 };
@@ -99,14 +116,12 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     });
   });
 
-  // maze-move — broadcast player's position to room
   socket.on("maze-move", (payload: MazeMovePayload) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode) return;
     socket.to(roomCode).emit("maze-move", payload);
   });
 
-  // maze-complete — player reached the end
   socket.on("maze-complete", async (payload: MazeCompletePayload) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode || !userId) return;
@@ -116,19 +131,17 @@ export function registerGameHandlers(io: Server, socket: Socket) {
 
     session.completed.add(userId);
     const rank = session.completed.size;
-    const timeScore = Math.max(0, 60 - payload.timeSeconds); // Faster = more points
+    const timeScore = Math.max(0, 60 - payload.timeSeconds);
     session.scores.set(userId, timeScore);
 
     io.to(roomCode).emit("maze-complete", { userId, rank, timeSeconds: payload.timeSeconds });
 
-    // End game when all players complete or after 90 seconds
     const room = await getRoomByCode(roomCode);
     if (room && session.completed.size >= room.participants.length) {
       await endGame(io, roomCode, session);
     }
   });
 
-  // breadcrumb-tap — player tapped a breadcrumb
   socket.on("breadcrumb-tap", (payload: BreadcrumbTapPayload) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode || !userId) return;
@@ -142,13 +155,12 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     socket.to(roomCode).emit("breadcrumb-tap", { userId, score: current + 1 });
   });
 
-  // breadcrumb-game-end (timer ran out on client)
   socket.on("breadcrumb-end", async (payload: { roomCode: string }) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode || !userId) return;
 
     const room = await getRoomByCode(roomCode);
-    if (!room || room.hostId !== userId) return; // Only host can end
+    if (!room || room.hostId !== userId) return;
 
     const session = activeGames.get(roomCode);
     if (session && session.gameType === GameType.BREADCRUMB) {
@@ -156,21 +168,19 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     }
   });
 
-  // pictionary-draw — broadcaster draws
   socket.on("pictionary-draw", (payload: PictionaryDrawPayload) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode) return;
     socket.to(roomCode).emit("pictionary-draw", payload);
   });
 
-  // pictionary-guess — others guess
   socket.on("pictionary-guess", async (payload: PictionaryGuessPayload) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode || !userId) return;
 
     const session = activeGames.get(roomCode);
     if (!session || session.gameType !== GameType.PICTIONARY || !session.word) return;
-    if (session.completed.has(userId)) return; // Already guessed correctly
+    if (session.completed.has(userId)) return;
 
     const isCorrect =
       payload.guess.trim().toLowerCase() === session.word.toLowerCase();
@@ -187,13 +197,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         guess: payload.guess,
       });
 
-      // Drawer also gets points for each correct guess
       if (session.drawer) {
         const drawerScore = (session.scores.get(session.drawer) ?? 0) + 5;
         session.scores.set(session.drawer, drawerScore);
       }
 
-      // End game if everyone guessed
       const room = await getRoomByCode(roomCode);
       const guesserCount = room
         ? room.participants.filter((p) => p.userId !== session.drawer).length
@@ -244,7 +252,6 @@ async function endGame(io: Server, roomCode: string, session: GameSession) {
   const room = await getRoomByCode(roomCode);
   if (!room) return;
 
-  // Sort scores to determine rank
   const sortedScores = [...session.scores.entries()].sort((a, b) => b[1] - a[1]);
 
   const results: GameResult[] = await Promise.all(

@@ -5,6 +5,7 @@ import { Server } from "socket.io";
 import cors from "cors";
 import apiRouter from "./routes/index";
 import { initializeSocket } from "./socket/index";
+import { setIo } from "./lib/socketServer";
 
 const app = express();
 const httpServer = createServer(app);
@@ -74,6 +75,7 @@ const io = new Server(httpServer, {
 });
 
 initializeSocket(io);
+setIo(io);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 httpServer.listen(PORT, () => {

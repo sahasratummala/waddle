@@ -1,46 +1,22 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Socket } from "socket.io-client";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Loader2, Timer, Sparkles, Trophy } from "lucide-react";
+import type { Socket } from "socket.io-client";
+import DrawingBoard, { DrawingBoardRef } from "./DrawingBoard";
+import { useAuthStore } from "@/store/authStore";
 
 interface PictionaryGameProps {
-  socket: Socket;
-  roomCode: string;
+  socket?: typeof Socket.prototype;
+  roomCode?: string;
   userId: string;
   username: string;
-  onGameEnd: (winnerId: string, winnerName: string) => void;
+  onGameEnd: (result?: unknown) => void;
 }
 
-interface StrokePoint {
-  x: number;
-  y: number;
-}
+type GamePhase = "loading" | "drawing" | "won" | "lost" | "someone-won";
 
-interface Stroke {
-  points: StrokePoint[];
-  color: string;
-  width: number;
-}
-
-// Goose-themed drawing prompts
-const PROMPTS = [
-  "goose in a top hat",
-  "goose riding a bicycle",
-  "goose eating pizza",
-  "goose at the beach",
-  "gosling hatching from an egg",
-  "goose playing guitar",
-  "goose in a raincoat",
-  "goose astronaut",
-  "goose chasing someone",
-  "goose doing yoga",
-  "a flock of geese",
-  "goose with sunglasses",
-  "goose at a birthday party",
-  "goose reading a book",
-  "goose flying south",
-];
-
-const COLORS = ["#222", "#7F77DD", "#D85A30", "#1D9E75", "#D4537E", "#EF9F27"];
-const WIDTHS = [3, 6, 12];
+const GAME_SECONDS = 120;        // 2-minute timer
+const CHECK_INTERVAL_MS = 4000;  // poll Gemini every 4s
+const CHECK_START_DELAY_MS = 8000; // wait 8s before first check (give time to draw)
 
 export default function PictionaryGame({
   socket,
@@ -49,360 +25,225 @@ export default function PictionaryGame({
   username,
   onGameEnd,
 }: PictionaryGameProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [currentStroke, setCurrentStroke] = useState<StrokePoint[]>([]);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [color, setColor] = useState("#222");
-  const [width, setWidth] = useState(6);
-  const [prompt, setPrompt] = useState<string | null>(null);
-  const [isDrawer, setIsDrawer] = useState(false);
-  const [aiGuess, setAiGuess] = useState<string | null>(null);
-  const [isGuessing, setIsGuessing] = useState(false);
-  const [guessHistory, setGuessHistory] = useState<{ guess: string; correct: boolean }[]>([]);
+  const { session } = useAuthStore();
+  const [phase, setPhase] = useState<GamePhase>("loading");
+  const [word, setWord] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(GAME_SECONDS);
+  const [geminiGuess, setGeminiGuess] = useState<string>("");
   const [winner, setWinner] = useState<{ userId: string; username: string } | null>(null);
-  const [timeLeft, setTimeLeft] = useState(60);
-  const guessTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const gameTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastGuessTime = useRef(0);
-  const allStrokesRef = useRef<Stroke[]>([]);
 
-  // Server assigns drawer role and prompt
+  const drawingRef = useRef<DrawingBoardRef>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isChecking = useRef(false);
+  const gameOver = useRef(false);
+
+  const isSolo = !socket || !roomCode;
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  function stopTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+  function stopPolling() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (pollDelayRef.current) { clearTimeout(pollDelayRef.current); pollDelayRef.current = null; }
+  }
+  function endGame(p: GamePhase) {
+    if (gameOver.current) return;
+    gameOver.current = true;
+    setPhase(p);
+    stopTimer();
+    stopPolling();
+  }
+
+  // ── Get word ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    socket.on("pictionary:your_turn", ({ prompt: p }: { prompt: string }) => {
-      setPrompt(p);
-      setIsDrawer(true);
-    });
-
-    socket.on("pictionary:new_stroke", (stroke: Stroke) => {
-      allStrokesRef.current = [...allStrokesRef.current, stroke];
-      setStrokes([...allStrokesRef.current]);
-      redrawCanvas(allStrokesRef.current);
-    });
-
-    socket.on("pictionary:clear", () => {
-      allStrokesRef.current = [];
-      setStrokes([]);
-      clearCanvas();
-    });
-
-    socket.on("pictionary:winner", (data: { userId: string; username: string }) => {
-      setWinner(data);
-      onGameEnd(data.userId, data.username);
-    });
-
-    socket.on("pictionary:start", ({ drawerId, prompt: p }: { drawerId: string; prompt: string }) => {
-      if (drawerId === userId) {
-        setPrompt(p);
-        setIsDrawer(true);
-      }
-      // Start countdown
-      let t = 60;
-      setTimeLeft(t);
-      gameTimerRef.current = setInterval(() => {
-        t--;
-        setTimeLeft(t);
-        if (t <= 0) {
-          clearInterval(gameTimerRef.current!);
-          socket.emit("pictionary:time_up", { roomCode });
-        }
-      }, 1000);
-    });
-
-    return () => {
-      socket.off("pictionary:your_turn");
-      socket.off("pictionary:new_stroke");
-      socket.off("pictionary:clear");
-      socket.off("pictionary:winner");
-      socket.off("pictionary:start");
-      if (guessTimerRef.current) clearInterval(guessTimerRef.current);
-      if (gameTimerRef.current) clearInterval(gameTimerRef.current);
-    };
-  }, [socket, roomCode, userId, onGameEnd]);
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  const redrawCanvas = useCallback((strokeList: Stroke[]) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    for (const stroke of strokeList) {
-      if (stroke.points.length < 2) continue;
-      ctx.beginPath();
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = stroke.width;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-      for (const pt of stroke.points.slice(1)) ctx.lineTo(pt.x, pt.y);
-      ctx.stroke();
-    }
-  }, []);
-
-  useEffect(() => {
-    redrawCanvas(strokes);
-  }, [strokes, redrawCanvas]);
-
-  const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    if ("touches" in e) {
-      return {
-        x: (e.touches[0].clientX - rect.left) * scaleX,
-        y: (e.touches[0].clientY - rect.top) * scaleY,
+    if (isSolo) {
+      fetch("/api/games/pictionary/word", {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+        .then((r) => r.json())
+        .then((d) => { setWord(d.word); setPhase("drawing"); })
+        .catch(() => { setWord("feather"); setPhase("drawing"); });
+    } else {
+      // Multiplayer: server broadcasts word to whole room after game:start
+      const handleWord = ({ word: w }: { word: string }) => {
+        setWord(w);
+        setPhase("drawing");
       };
+      socket!.on("pictionary:word", handleWord);
+      // In case we mounted after the broadcast, request it again
+      socket!.emit("pictionary:request-word", { roomCode });
+      return () => { socket!.off("pictionary:word", handleWord); };
     }
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Multiplayer winner from another player ──────────────────────────────────
+  useEffect(() => {
+    if (isSolo || !socket) return;
+    const handleWinner = (data: { userId: string; username: string }) => {
+      setWinner({ userId: data.userId, username: data.username });
+      endGame(data.userId === userId ? "won" : "someone-won");
     };
-  };
+    socket.on("pictionary:winner", handleWinner);
+    return () => { socket.off("pictionary:winner", handleWinner); };
+  }, [socket, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleStart = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawer) return;
-    e.preventDefault();
-    const canvas = canvasRef.current!;
-    const pos = getPos(e, canvas);
-    setIsDrawing(true);
-    setCurrentStroke([pos]);
+  // ── Gemini check ─────────────────────────────────────────────────────────────
+  const checkDrawing = useCallback(async () => {
+    if (isChecking.current || gameOver.current || !word) return;
+    const imageData = drawingRef.current?.getImageData();
+    // Skip if canvas is nearly blank (tiny base64 = nothing drawn)
+    if (!imageData || imageData.length < 300) return;
 
-    const ctx = canvas.getContext("2d")!;
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-  };
-
-  const handleMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !isDrawer) return;
-    e.preventDefault();
-    const canvas = canvasRef.current!;
-    const pos = getPos(e, canvas);
-    setCurrentStroke((prev) => [...prev, pos]);
-
-    const ctx = canvas.getContext("2d")!;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-  };
-
-  const handleEnd = () => {
-    if (!isDrawer || !isDrawing) return;
-    setIsDrawing(false);
-
-    const stroke: Stroke = { points: currentStroke, color, width };
-    allStrokesRef.current = [...allStrokesRef.current, stroke];
-    setStrokes([...allStrokesRef.current]);
-
-    // Broadcast stroke to other players
-    socket.emit("pictionary:stroke", { roomCode, stroke });
-
-    // Throttle AI guessing to every 3 seconds
-    const now = Date.now();
-    if (!isGuessing && now - lastGuessTime.current > 3000) {
-      lastGuessTime.current = now;
-      triggerAiGuess();
-    }
-  };
-
-  const triggerAiGuess = async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    setIsGuessing(true);
-
+    isChecking.current = true;
     try {
-      const imageData = canvas.toDataURL("image/png").split(",")[1];
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/games/pictionary/check", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 100,
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image",
-                  source: { type: "base64", media_type: "image/png", data: imageData },
-                },
-                {
-                  type: "text",
-                  text: `You are guessing what someone drew in a Pictionary-style game. The drawing is goose-themed. Look at this drawing and give your best guess in 1-5 words. Be specific and creative. Just say the guess, nothing else. Example: "goose riding a bicycle"`,
-                },
-              ],
-            },
-          ],
+          imageData,
+          mimeType: "image/png",
+          word,
+          roomCode: isSolo ? undefined : roomCode,
+          username,
         }),
       });
-
-      const data = await response.json();
-      const guess = data.content?.[0]?.text?.trim() ?? "a mysterious goose";
-      setAiGuess(guess);
-
-      // Check if guess matches prompt (fuzzy match)
-      const correct = prompt
-        ? prompt.toLowerCase().split(" ").some((w) => guess.toLowerCase().includes(w) && w.length > 3)
-        : false;
-
-      setGuessHistory((prev) => [{ guess, correct }, ...prev.slice(0, 4)]);
-
-      if (correct) {
-        socket.emit("pictionary:ai_guessed", { roomCode, prompt, guess });
+      const data = await res.json();
+      if (data.attempt) setGeminiGuess(data.attempt);
+      if (data.guessed && !gameOver.current) {
+        setWinner({ userId, username });
+        endGame("won");
       }
-    } catch (err) {
-      console.error("AI guess failed:", err);
+    } catch {
+      // Non-fatal — keep polling
     } finally {
-      setIsGuessing(false);
+      isChecking.current = false;
     }
-  };
+  }, [word, session, roomCode, isSolo, username, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleClear = () => {
-    allStrokesRef.current = [];
-    setStrokes([]);
-    clearCanvas();
-    socket.emit("pictionary:clear", { roomCode });
-  };
+  // ── Start timer + polling once drawing begins ────────────────────────────────
+  useEffect(() => {
+    if (phase !== "drawing") return;
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) { endGame("lost"); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+
+    pollDelayRef.current = setTimeout(() => {
+      if (!gameOver.current) {
+        pollRef.current = setInterval(checkDrawing, CHECK_INTERVAL_MS);
+      }
+    }, CHECK_START_DELAY_MS);
+
+    return () => { stopTimer(); stopPolling(); };
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function fmt(s: number) {
+    return `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+  }
+
+  // ── Loading ──────────────────────────────────────────────────────────────────
+  if (phase === "loading") {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16">
+        <Loader2 className="w-8 h-8 text-avocado animate-spin" />
+        <p className="text-forest/60 text-sm font-medium">Getting your word…</p>
+      </div>
+    );
+  }
+
+  // ── End screen ───────────────────────────────────────────────────────────────
+  if (phase !== "drawing") {
+    const isWin = phase === "won";
+    const isLost = phase === "lost";
+    return (
+      <div className="flex flex-col items-center gap-5 py-10 text-center">
+        <span className="text-6xl">{isWin ? "🏆" : isLost ? "⏰" : "🎉"}</span>
+        <div>
+          <h3 className="font-display text-2xl font-black text-forest mb-2">
+            {isWin
+              ? "Gemini guessed it!"
+              : isLost
+              ? "Time's up!"
+              : `${winner?.username ?? "Someone"} won!`}
+          </h3>
+          <p className="text-forest/55 text-sm max-w-xs mx-auto">
+            {isWin
+              ? `Your drawing of "${word}" earned you 25 points! 🪿`
+              : isLost
+              ? `Gemini couldn't figure out "${word}" in 2 minutes. No points this round.`
+              : `They drew "${word}" and Gemini figured it out first.`}
+          </p>
+        </div>
+        <button
+          onClick={() => onGameEnd()}
+          className="px-6 py-2.5 rounded-xl font-bold text-sm text-white transition-all hover:opacity-90 active:scale-95"
+          style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
+        >
+          {isSolo ? "Play Again" : "Back to Break"}
+        </button>
+      </div>
+    );
+  }
+
+  // ── Drawing phase ────────────────────────────────────────────────────────────
+  const urgent = timeLeft <= 30;
+  const warning = timeLeft <= 60;
+  const checkingStarted = timeLeft <= GAME_SECONDS - CHECK_START_DELAY_MS / 1000;
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-lg mx-auto">
-      {/* Timer + prompt */}
-      <div className="flex items-center justify-between w-full">
-        <div
-          className="px-4 py-1.5 rounded-full text-sm font-semibold"
-          style={{ background: "#EEEDFE", color: "#534AB7" }}
-        >
-          {isDrawer ? `Draw: "${prompt}"` : "Guess the drawing!"}
+    <div className="flex flex-col gap-4">
+      {/* Word + timer */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs text-forest/45 font-semibold uppercase tracking-widest mb-0.5">Draw this</p>
+          <h2 className="font-display text-3xl font-black text-forest leading-none">{word}</h2>
         </div>
         <div
-          className="text-sm font-mono font-bold px-3 py-1 rounded-full"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono font-black text-xl border-2 transition-colors"
           style={{
-            background: timeLeft <= 10 ? "#FCEBEB" : "#EAF3DE",
-            color: timeLeft <= 10 ? "#A32D2D" : "#3B6D11",
+            background: urgent ? "rgba(192,57,43,0.08)" : warning ? "rgba(251,140,0,0.08)" : "rgba(137,132,51,0.08)",
+            color:      urgent ? "#c0392b" : warning ? "#e65100" : "#898433",
+            borderColor: urgent ? "rgba(192,57,43,0.25)" : warning ? "rgba(251,140,0,0.25)" : "rgba(137,132,51,0.2)",
           }}
         >
-          {timeLeft}s
+          <Timer className="w-5 h-5" />
+          {fmt(timeLeft)}
         </div>
       </div>
 
-      {/* Winner banner */}
-      {winner && (
-        <div
-          className="w-full text-center py-3 rounded-xl font-bold text-lg"
-          style={{ background: "#FAEEDA", color: "#BA7517", border: "1.5px solid #FAC775" }}
-        >
-          🏆 AI guessed "{prompt}" from {winner.username}'s drawing!
-        </div>
-      )}
-
-      {/* Canvas */}
-      <canvas
-        ref={canvasRef}
-        width={480}
-        height={320}
-        className="rounded-2xl touch-none w-full"
-        style={{
-          border: "2px solid #CECBF6",
-          background: "#fff",
-          cursor: isDrawer ? "crosshair" : "not-allowed",
-          maxHeight: 320,
-        }}
-        onMouseDown={handleStart}
-        onMouseMove={handleMove}
-        onMouseUp={handleEnd}
-        onMouseLeave={handleEnd}
-        onTouchStart={handleStart}
-        onTouchMove={handleMove}
-        onTouchEnd={handleEnd}
-      />
-
-      {/* Drawing tools */}
-      {isDrawer && (
-        <div className="flex items-center gap-3 flex-wrap justify-center">
-          {/* Colors */}
-          <div className="flex gap-2">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
-                className="w-7 h-7 rounded-full transition-transform hover:scale-110"
-                style={{
-                  background: c,
-                  border: color === c ? "3px solid #7F77DD" : "2px solid transparent",
-                  outline: color === c ? "2px solid white" : "none",
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Brush sizes */}
-          <div className="flex gap-2 items-center">
-            {WIDTHS.map((w) => (
-              <button
-                key={w}
-                onClick={() => setWidth(w)}
-                className="rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition"
-                style={{
-                  width: w + 16,
-                  height: w + 16,
-                  border: width === w ? "2px solid #7F77DD" : "2px solid transparent",
-                }}
-              >
-                <span
-                  className="rounded-full bg-gray-700"
-                  style={{ width: w, height: w }}
-                />
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={handleClear}
-            className="px-3 py-1 rounded-lg text-sm text-gray-500 hover:bg-gray-100 transition"
-            style={{ border: "1px solid #D3D1C7" }}
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      {/* AI guess feed */}
-      <div className="w-full">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">AI Guesses</span>
-          {isGuessing && (
-            <span className="text-xs text-purple-500 animate-pulse">thinking…</span>
-          )}
-        </div>
-        <div className="space-y-1.5">
-          {guessHistory.length === 0 && (
-            <p className="text-sm text-gray-400 italic">AI will guess as you draw…</p>
-          )}
-          {guessHistory.map((g, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
-              style={{
-                background: g.correct ? "#EAF3DE" : "#F1EFE8",
-                border: g.correct ? "1px solid #C0DD97" : "1px solid #D3D1C7",
-              }}
-            >
-              <span style={{ fontSize: 16 }}>{g.correct ? "✓" : "?"}</span>
-              <span style={{ color: g.correct ? "#3B6D11" : "#5F5E5A" }}>{g.guess}</span>
-            </div>
-          ))}
-        </div>
+      {/* Gemini status */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-forest/8 bg-cream/50">
+        <Sparkles className="w-3.5 h-3.5 text-avocado shrink-0" style={{ opacity: checkingStarted ? 1 : 0.4 }} />
+        <p className="text-xs text-forest/55">
+          {!checkingStarted
+            ? "Keep drawing — Gemini will start guessing soon…"
+            : geminiGuess
+            ? <>Gemini thinks it's… <span className="font-bold text-forest">"{geminiGuess}"</span></>
+            : "Gemini is studying your drawing…"}
+        </p>
+        {!isSolo && (
+          <span className="ml-auto flex items-center gap-1 text-xs text-forest/35 font-medium shrink-0">
+            <Trophy className="w-3 h-3" /> Race!
+          </span>
+        )}
       </div>
+
+      {/* Drawing board */}
+      <DrawingBoard ref={drawingRef} />
+
+      <p className="text-xs text-center text-forest/30">
+        Draw clearly — Gemini checks every few seconds.
+        {!isSolo && " First player it guesses wins for everyone!"}
+      </p>
     </div>
   );
 }
