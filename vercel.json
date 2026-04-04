@@ -3,3 +3,11 @@
   "outputDirectory": "client/dist",
   "installCommand": "npm install"
 }
+{
+  "build": {
+    "buildCommand": "npm install && npm run build --workspace=server"
+  },
+  "deploy": {
+    "startCommand": "cd server && node dist/index.js"
+  }
+}
