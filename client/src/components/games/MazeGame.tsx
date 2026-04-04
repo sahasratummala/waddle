@@ -7,13 +7,14 @@ interface MazeGameProps {
   userId: string;
   username: string;
   onGameEnd?: () => void;
+  onPointsEarned?: (points: number) => void; // Added points prop
   seed?: number;
   size?: number;
 }
 
 interface Cell {
-  right: boolean; // wall on the right edge of this cell
-  bottom: boolean; // wall on the bottom edge of this cell
+  right: boolean;
+  bottom: boolean;
 }
 
 interface Pos {
@@ -38,7 +39,6 @@ interface FinishRecord {
 const CELL = 32;
 const GOOSE_COLORS = ["#898433", "#7E9DA2", "#45441A", "#6E6A28", "#56777D", "#282C15"];
 
-// Simple seeded LCG random
 function makeRng(seed: number) {
   let s = seed >>> 0;
   return () => {
@@ -47,7 +47,6 @@ function makeRng(seed: number) {
   };
 }
 
-// Recursive-backtracker maze
 function buildMaze(seed: number, size: number): Cell[][] {
   const rng = makeRng(seed);
   const grid: Cell[][] = Array.from({ length: size }, (_, r) =>
@@ -72,7 +71,6 @@ function buildMaze(seed: number, size: number): Cell[][] {
     for (const [dr, dc] of shuffle([[0, 1], [1, 0], [0, -1], [-1, 0]] as [number, number][])) {
       const nr = r + dr, nc = c + dc;
       if (nr < 0 || nr >= size || nc < 0 || nc >= size || visited[nr][nc]) continue;
-      // Remove wall between (r,c) and (nr,nc)
       if (dr === 0 && dc === 1) grid[r][c].right = false;
       else if (dr === 0 && dc === -1) grid[nr][nc].right = false;
       else if (dr === 1 && dc === 0) grid[r][c].bottom = false;
@@ -104,12 +102,12 @@ export default function MazeGame({
   userId,
   username,
   onGameEnd,
+  onPointsEarned,
   seed: seedProp,
   size = 8,
 }: MazeGameProps) {
   const isSolo = !socket || roomCode === "SOLO_GAME";
 
-  // Derive a consistent seed from roomCode if none provided
   const seed = seedProp ?? (() => {
     let h = 5381;
     for (let i = 0; i < roomCode.length; i++) h = ((h << 5) + h + roomCode.charCodeAt(i)) >>> 0;
@@ -131,7 +129,6 @@ export default function MazeGame({
   const startTimeRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Full reset on new round
   useEffect(() => {
     grid.current = buildMaze(seed + round, size);
     phaseRef.current = "countdown";
@@ -167,7 +164,7 @@ export default function MazeGame({
       clearInterval(iv);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [round]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [round, seed, size]); 
 
   const move = useCallback((dir: "up" | "down" | "left" | "right") => {
     if (phaseRef.current !== "playing") return;
@@ -180,17 +177,16 @@ export default function MazeGame({
         c: prev.c + (dir === "right" ? 1 : dir === "left" ? -1 : 0),
       };
 
-      // Emit position
       if (!isSolo && socket) {
         socket.emit("maze-move", {
           roomCode,
           userId,
+          username, // FIX: Included username to prevent crash on other screens
           direction: dir.toUpperCase(),
           position: { x: next.c, y: next.r },
         });
       }
 
-      // Reached exit
       if (next.r === size - 1 && next.c === size - 1) {
         const timeSeconds = startTimeRef.current
           ? Math.floor((Date.now() - startTimeRef.current) / 1000)
@@ -201,13 +197,13 @@ export default function MazeGame({
         setMyTime(timeSeconds);
 
         if (!isSolo && socket) {
-          socket.emit("maze-complete", { roomCode, userId, timeSeconds });
+          socket.emit("maze-complete", { roomCode, userId, username, timeSeconds });
         }
       }
 
       return next;
     });
-  }, [isSolo, socket, roomCode, userId, size]);
+  }, [isSolo, socket, roomCode, userId, username, size]);
 
   // Keyboard
   useEffect(() => {
@@ -243,31 +239,43 @@ export default function MazeGame({
   // Multiplayer listeners
   useEffect(() => {
     if (isSolo || !socket) return;
+
     const handleMove = (data: { userId: string; username: string; position: { x: number; y: number } }) => {
       if (data.userId === userId) return;
       setOthers((prev) => {
         const idx = prev.findIndex((p) => p.userId === data.userId);
-        const updated = { userId: data.userId, username: data.username, pos: { r: data.position.y, c: data.position.x }, finished: false };
+        const updated = { 
+          userId: data.userId, 
+          username: data.username || "Goose", // FIX: Fallback just in case
+          pos: { r: data.position.y, c: data.position.x }, 
+          finished: false 
+        };
         if (idx >= 0) return prev.map((p, i) => i === idx ? { ...p, pos: updated.pos } : p);
         return [...prev, updated];
       });
     };
-    const handleComplete = (data: { userId: string; rank: number; timeSeconds: number }) => {
+
+    const handleComplete = (data: { userId: string; username: string; rank: number; timeSeconds: number }) => {
       if (data.userId === userId) {
         setMyRank(data.rank);
+        // ADDED: Give points to the 1st place winner!
+        if (data.rank === 1 && onPointsEarned) {
+          onPointsEarned(50); // Gives 50 points for winning
+        }
         return;
       }
       setOthers((prev) => prev.map((p) => p.userId === data.userId ? { ...p, finished: true } : p));
       setFinished((prev) => {
         if (prev.some((p) => p.userId === data.userId)) return prev;
-        const name = others.find((p) => p.userId === data.userId)?.username ?? "Player";
+        const name = data.username || others.find((p) => p.userId === data.userId)?.username || "Player";
         return [...prev, { userId: data.userId, username: name, rank: data.rank, timeSeconds: data.timeSeconds }];
       });
     };
+
     socket.on("maze-move", handleMove);
     socket.on("maze-complete", handleComplete);
     return () => { socket.off("maze-move", handleMove); socket.off("maze-complete", handleComplete); };
-  }, [isSolo, socket, userId, others]);
+  }, [isSolo, socket, userId, others, onPointsEarned]);
 
   const allFinished: FinishRecord[] = myTime !== null
     ? [{ userId, username, rank: myRank ?? 1, timeSeconds: myTime }, ...finished]
@@ -279,7 +287,6 @@ export default function MazeGame({
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
-      {/* Countdown */}
       {phase === "countdown" && (
         <div className="flex flex-col items-center gap-3 py-8">
           <p className="text-forest/50 text-sm font-medium">Navigate your goose to the exit! 🚪</p>
@@ -296,7 +303,6 @@ export default function MazeGame({
 
       {phase !== "countdown" && (
         <>
-          {/* Timer row */}
           <div className="flex items-center gap-3 text-sm font-bold text-forest/60">
             <span>⏱ {fmtTime(myTime ?? elapsed)}</span>
             {!isSolo && (
@@ -306,7 +312,6 @@ export default function MazeGame({
             )}
           </div>
 
-          {/* Maze */}
           <div
             className="relative"
             style={{
@@ -347,26 +352,27 @@ export default function MazeGame({
                     >
                       {isExit && <span style={{ fontSize: 16, lineHeight: 1, pointerEvents: "none" }}>🚪</span>}
 
-                      {/* Other players */}
-                      {othersHere.map((o, i) => (
-                        <div
-                          key={o.userId}
-                          style={{
-                            position: "absolute",
-                            top: 3, right: 3,
-                            width: 16, height: 16,
-                            borderRadius: "50%",
-                            background: GOOSE_COLORS[(i + 1) % GOOSE_COLORS.length],
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 8, color: "white", fontWeight: "bold",
-                            opacity: o.finished ? 0.35 : 0.9,
-                          }}
-                        >
-                          {o.username[0]?.toUpperCase()}
-                        </div>
-                      ))}
+                      {othersHere.map((o, i) => {
+                        const firstInitial = (o.username && o.username.length > 0) ? o.username[0].toUpperCase() : "G";
+                        return (
+                          <div
+                            key={o.userId}
+                            style={{
+                              position: "absolute",
+                              top: 3, right: 3,
+                              width: 16, height: 16,
+                              borderRadius: "50%",
+                              background: GOOSE_COLORS[(i + 1) % GOOSE_COLORS.length],
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 8, color: "white", fontWeight: "bold",
+                              opacity: o.finished ? 0.35 : 0.9,
+                            }}
+                          >
+                            {firstInitial}
+                          </div>
+                        );
+                      })}
 
-                      {/* This player */}
                       {myHere && (
                         <div
                           style={{
@@ -391,7 +397,6 @@ export default function MazeGame({
             </div>
           </div>
 
-          {/* D-pad */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 44px)", gridTemplateRows: "repeat(2, 44px)", gap: 6 }}>
             <div />
             <button
@@ -415,7 +420,6 @@ export default function MazeGame({
         </>
       )}
 
-      {/* Results */}
       {phase === "results" && (
         <div className="w-full flex flex-col gap-3 max-w-sm">
           <h3 className="text-center font-display font-black text-forest text-2xl">Maze Done! 🪿</h3>
