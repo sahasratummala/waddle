@@ -6,6 +6,18 @@ import { supabaseAdmin } from "../lib/supabase";
 
 const router = Router();
 
+// Spreads self-care tasks evenly between main tasks instead of appending them at the end.
+function interleave<T>(main: T[], selfCare: T[]): T[] {
+  if (selfCare.length === 0) return main;
+  const result = [...main];
+  const gap = Math.max(1, Math.floor(main.length / (selfCare.length + 1)));
+  selfCare.forEach((sc, i) => {
+    const pos = Math.min(gap * (i + 1) + i, result.length);
+    result.splice(pos, 0, sc);
+  });
+  return result;
+}
+
 // POST /api/tasks/generate
 // Takes a user's description of their day, generates structured tasks via Claude,
 // saves them to the DB, and returns the task list.
@@ -27,11 +39,15 @@ router.post("/generate", requireAuth, async (req: AuthenticatedRequest, res: Res
     // Generate tasks using Claude
     const result = await generateTasks(description.trim());
 
-    // Save all tasks to the database
-    const allTasks = [
-      ...result.tasks.map((t) => ({ ...t, is_self_care: false })),
-      ...result.selfCare.map((t) => ({ ...t, is_self_care: true })),
-    ];
+    // Interleave self-care tasks evenly among main tasks so they appear
+    // throughout the day rather than all bunched at the end.
+    type InsertableTask = {
+      title: string; description: string; estimatedMinutes: number;
+      points: number; category: string; is_self_care: boolean;
+    };
+    const mainTasks: InsertableTask[] = result.tasks.map((t) => ({ ...t, is_self_care: false }));
+    const selfCareTasks: InsertableTask[] = result.selfCare.map((t) => ({ ...t, is_self_care: true }));
+    const allTasks: InsertableTask[] = interleave(mainTasks, selfCareTasks);
 
     const tasksToInsert = allTasks.map((task) => ({
       user_id: userId,
@@ -65,21 +81,20 @@ router.post("/generate", requireAuth, async (req: AuthenticatedRequest, res: Res
 });
 
 // POST /api/tasks/verify
-// Verifies task completion via Gemini Vision analysis of an uploaded photo.
-// Expects: { taskId: string, photoUrl: string, imageData: string (base64), mimeType: string }
+// Verifies task completion via Gemini Vision, then uploads the photo server-side.
+// Expects: { taskId: string, imageData: string (base64), mimeType: string }
 router.post("/verify", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { taskId, photoUrl, imageData, mimeType } = req.body as {
+  const { taskId, imageData, mimeType } = req.body as {
     taskId?: string;
-    photoUrl?: string;
     imageData?: string;
     mimeType?: string;
   };
   const userId = req.userId!;
 
-  if (!taskId || !photoUrl || !imageData || !mimeType) {
+  if (!taskId || !imageData || !mimeType) {
     res.status(400).json({
       success: false,
-      error: "taskId, photoUrl, imageData, and mimeType are required.",
+      error: "taskId, imageData, and mimeType are required.",
     });
     return;
   }
@@ -119,6 +134,19 @@ router.post("/verify", requireAuth, async (req: AuthenticatedRequest, res: Respo
       });
       return;
     }
+
+    // Upload photo to Supabase Storage server-side (service role bypasses RLS)
+    const ext = mimeType.split("/")[1] ?? "jpg";
+    const storagePath = `task-verifications/${taskId}.${ext}`;
+    const imageBuffer = Buffer.from(imageData, "base64");
+
+    const { error: storageError } = await supabaseAdmin.storage
+      .from("task-photos")
+      .upload(storagePath, imageBuffer, { contentType: mimeType, upsert: true });
+
+    const photoUrl = storageError
+      ? null  // non-fatal — still award points even if storage fails
+      : supabaseAdmin.storage.from("task-photos").getPublicUrl(storagePath).data.publicUrl;
 
     // Mark task complete and store photo URL
     const { error: updateError } = await supabaseAdmin
