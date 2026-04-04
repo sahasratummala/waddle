@@ -1,4 +1,3 @@
-import React from "react";
 import { Gamepad2, Lock } from "lucide-react";
 
 type GameId = "MAZE" | "BREADCRUMB" | "PICTIONARY";
