@@ -89,8 +89,8 @@ export default function Register() {
               <Bird className="w-7 h-7 text-avocado" />
             </div>
           </Link>
-          <h1 className="font-display text-3xl font-black text-forest">Hatch your egg</h1>
-          <p className="text-sm text-forest/50 font-medium mt-1">Create your free Waddle account</p>
+          <h1 className="font-display text-3xl font-black text-forest">Adopt Your Goose</h1>
+          <p className="text-sm text-forest/50 font-medium mt-1">Create Your Waddle Account</p>
         </div>
 
         <div className="card p-7">
@@ -108,7 +108,7 @@ export default function Register() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="goose_master"
+                placeholder="mothergoose"
                 className="input-base"
                 autoFocus
                 required
@@ -156,12 +156,12 @@ export default function Register() {
 
           <p className="text-center text-sm mt-5 text-forest/50 font-medium">
             Already have an account?{" "}
-            <Link to="/login" className="text-avocado font-black hover:text-olive transition-colors">Sign in</Link>
+            <Link to="/login" className="text-avocado font-black hover:text-olive transition-colors">Sign In</Link>
           </p>
         </div>
 
         <p className="text-center text-xs mt-4">
-          <Link to="/" className="text-forest/30 font-medium hover:text-forest/60 transition-colors">Back to home</Link>
+          <Link to="/" className="text-forest/30 font-medium hover:text-forest/60 transition-colors">Back to Home</Link>
         </p>
       </div>
     </div>

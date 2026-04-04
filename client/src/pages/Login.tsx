@@ -39,7 +39,7 @@ export default function Login() {
               <Bird className="w-7 h-7 text-avocado" />
             </div>
           </Link>
-          <h1 className="font-display text-3xl font-black text-forest">Welcome back</h1>
+          <h1 className="font-display text-3xl font-black text-forest">Welcome Back</h1>
           <p className="text-sm text-forest/50 font-medium mt-1">Sign in to Waddle</p>
         </div>
 
@@ -94,13 +94,13 @@ export default function Login() {
           <p className="text-center text-sm mt-5 text-forest/50 font-medium">
             No account?{" "}
             <Link to="/register" className="text-avocado font-black hover:text-olive transition-colors">
-              Create one free
+              Create One
             </Link>
           </p>
         </div>
 
         <p className="text-center text-xs mt-4">
-          <Link to="/" className="text-forest/30 font-medium hover:text-forest/60 transition-colors">Back to home</Link>
+          <Link to="/" className="text-forest/30 font-medium hover:text-forest/60 transition-colors">Back to Home</Link>
         </p>
       </div>
     </div>

@@ -15,6 +15,7 @@ interface AuthState {
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
+  refreshProfile: () => Promise<void>;
 }
 
 async function fetchProfile(userId: string): Promise<User | null> {
@@ -37,7 +38,7 @@ async function fetchProfile(userId: string): Promise<User | null> {
   };
 }
 
-export const useAuthStore = create<AuthState>((set, _get) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   supabaseUser: null,
   session: null,
@@ -47,22 +48,15 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   initialize: async () => {
     set({ loading: true });
 
-    // Get current session
     const { data: { session } } = await supabase.auth.getSession();
 
     if (session?.user) {
       const profile = await fetchProfile(session.user.id);
-      set({
-        session,
-        supabaseUser: session.user,
-        user: profile,
-        loading: false,
-      });
+      set({ session, supabaseUser: session.user, user: profile, loading: false });
     } else {
       set({ session: null, supabaseUser: null, user: null, loading: false });
     }
 
-    // Listen for auth state changes
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session?.user) {
         const profile = await fetchProfile(session.user.id);
@@ -78,10 +72,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   signIn: async (email: string, password: string) => {
     set({ loading: true, error: null });
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       set({ loading: false, error: error.message });
@@ -90,12 +81,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
     if (data.session?.user) {
       const profile = await fetchProfile(data.session.user.id);
-      set({
-        session: data.session,
-        supabaseUser: data.session.user,
-        user: profile,
-        loading: false,
-      });
+      set({ session: data.session, supabaseUser: data.session.user, user: profile, loading: false });
     }
   },
 
@@ -105,9 +91,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { username },
-      },
+      options: { data: { username } },
     });
 
     if (error) {
@@ -115,18 +99,10 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       throw error;
     }
 
-    // Profile is created by a Supabase trigger on auth.users insert.
-    // If session is immediate (email confirmation disabled), fetch profile.
     if (data.session?.user) {
       const profile = await fetchProfile(data.session.user.id);
-      set({
-        session: data.session,
-        supabaseUser: data.session.user,
-        user: profile,
-        loading: false,
-      });
+      set({ session: data.session, supabaseUser: data.session.user, user: profile, loading: false });
     } else {
-      // Email confirmation required — user needs to verify
       set({ loading: false });
     }
   },
@@ -138,4 +114,11 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  refreshProfile: async () => {
+    const { supabaseUser } = get();
+    if (!supabaseUser) return;
+    const profile = await fetchProfile(supabaseUser.id);
+    if (profile) set({ user: profile });
+  },
 }));
