@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Bird, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Button from "@/components/ui/Button";
 import GooseAvatar from "@/components/goose/GooseAvatar";
 import { GooseStage } from "@waddle/shared";
@@ -10,12 +10,14 @@ const STAGE_LABELS = ["Egg\n0 pts", "Hatchling\n100 pts", "Gosling\n300 pts", "G
 export default function Landing() {
   return (
     <div className="min-h-screen bg-cream overflow-hidden">
-
-      {/* Nav */}
       <header className="flex items-center justify-between px-6 py-4 max-w-5xl mx-auto">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-avocado/15 border-2 border-avocado/30">
-            <Bird className="w-5 h-5 text-avocado" />
+          <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-avocado/15 border-2 border-avocado/30">
+            <img
+              src="/goose/hatchling.png"
+              alt="Waddle"
+              className="w-full h-full object-contain"
+            />
           </div>
           <span className="font-display text-xl font-black text-forest">Waddle</span>
         </div>
@@ -31,11 +33,8 @@ export default function Landing() {
           </Link>
         </div>
       </header>
-
       {/* Hero */}
       <section className="flex flex-col items-center text-center px-6 pt-10 pb-20 max-w-3xl mx-auto">
-
-        {/* Evolution row — evenly spaced, bottom-aligned */}
         <div className="w-full flex items-end justify-between mb-8 px-4">
           {STAGES.map((stage, i) => (
             <div key={stage} className="flex flex-col items-center gap-2">
@@ -54,8 +53,6 @@ export default function Landing() {
             </div>
           ))}
         </div>
-
-        {/* Headline */}
         <div className="mb-4">
           <h1 className="font-display text-5xl sm:text-6xl font-black text-forest leading-tight">
             Study together.
@@ -64,12 +61,10 @@ export default function Landing() {
             <span className="gradient-text">Grow your goose.</span>
           </h1>
         </div>
-
         <p className="text-base sm:text-lg max-w-xl mb-8 leading-relaxed text-forest/55 font-medium">
           Waddle turns your study sessions into a cozy, gamified adventure.
           Hatch an egg, raise a goose, and study alongside your flock.
         </p>
-
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <Link to="/register">
             <Button
@@ -88,7 +83,6 @@ export default function Landing() {
           </Link>
         </div>
       </section>
-
       <footer className="py-5 text-center text-xs text-forest/25 font-medium border-t border-forest/8">
         © 2026 Waddle. Made with love. 🪿
       </footer>
