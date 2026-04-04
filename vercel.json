@@ -3,3 +3,12 @@
   "outputDirectory": "client/dist",
   "installCommand": "npm install"
 }
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://waddle-uk2w.onrender.com/api/:path*"
+    }
+  ],
+  "outputDirectory": "client/dist"
+}
