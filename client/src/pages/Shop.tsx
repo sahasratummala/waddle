@@ -55,9 +55,9 @@ export default function Shop() {
     setActiveTab(isFullGoose ? "accessories" : "food");
   }, [isFullGoose]);
 
-  const progress = user ? getEvolutionProgress(user.pointsTotal) : { current: 0, needed: 100, percentage: 0 };
+  const progress = getEvolutionProgress();
   const nextStage = NEXT_STAGE[stage];
-  const canEvolve = nextStage && user ? user.pointsTotal >= GOOSE_EVOLUTION_THRESHOLDS[nextStage] : false;
+  const canEvolve = nextStage && goose ? goose.evolutionPoints >= GOOSE_EVOLUTION_THRESHOLDS[nextStage] : false;
   const equippedIds = new Set(goose?.accessories.map((a) => a.accessoryId) ?? []);
 
   const filteredAccessories = selectedCategory === "all"
@@ -171,11 +171,12 @@ export default function Shop() {
                       style={{ width: `${progress.percentage}%`, background: "linear-gradient(90deg, #898433, #7E9DA2)" }}
                     />
                   </div>
+                  <p className="text-xs text-forest/35 font-medium mt-1">{progress.current}/{progress.needed} pts</p>
                 </div>
               )}
 
               {nextStage && (
-                <Button variant="primary" fullWidth size="sm" disabled={!canEvolve} isLoading={evolvingLoading} onClick={handleEvolve} className="rounded-xl font-black">
+                <Button variant="primary" fullWidth size="sm" disabled={!canEvolve} isLoading={evolvingLoading} onClick={handleEvolve}>
                   {canEvolve ? `Evolve to ${STAGE_NAMES[nextStage]}!` : `${progress.needed - progress.current} pts to evolve`}
                 </Button>
               )}
@@ -193,10 +194,10 @@ export default function Shop() {
               <button
                 onClick={() => !isFullGoose && setActiveTab("food")}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold border-2 transition-all ${activeTab === "food" && !isFullGoose
-                    ? "bg-avocado text-white border-avocado"
-                    : isFullGoose
-                      ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
-                      : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
+                  ? "bg-avocado text-white border-avocado"
+                  : isFullGoose
+                    ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
+                    : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
                   }`}
               >
                 <Utensils className="w-4 h-4" />
@@ -207,17 +208,17 @@ export default function Shop() {
               <button
                 onClick={() => isFullGoose && setActiveTab("accessories")}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold border-2 transition-all ${activeTab === "accessories" && isFullGoose
-                    ? "bg-avocado text-white border-avocado"
-                    : !isFullGoose
-                      ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
-                      : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
+                  ? "bg-avocado text-white border-avocado"
+                  : !isFullGoose
+                    ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
+                    : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
                   }`}
               >
                 <ShoppingBag className="w-4 h-4" />
                 Accessories
                 {!isFullGoose && (
                   <span className="text-xs bg-ocean/15 text-ocean px-2 py-0.5 rounded-full font-bold">
-                    Goose+
+                    Goose stage
                   </span>
                 )}
               </button>
@@ -289,8 +290,8 @@ export default function Shop() {
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
                       className={`px-4 py-1.5 rounded-2xl text-sm font-bold border-2 transition-all capitalize ${selectedCategory === cat
-                          ? "bg-avocado text-white border-avocado"
-                          : "bg-white text-forest/60 border-forest/10 hover:border-avocado/30"
+                        ? "bg-avocado text-white border-avocado"
+                        : "bg-white text-forest/60 border-forest/10 hover:border-avocado/30"
                         }`}
                     >
                       {cat === "all" ? "All" : CATEGORY_LABELS[cat]}

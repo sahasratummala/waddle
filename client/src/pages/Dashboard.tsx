@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ShoppingBag, Users, Gamepad2, ChevronRight } from "lucide-react";
+import { ShoppingBag, Users, Gamepad2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useGooseStore } from "@/store/gooseStore";
 import GooseAvatar from "@/components/goose/GooseAvatar";
 import TaskList from "@/components/tasks/TaskList";
-import { GooseStage, NEXT_STAGE, GOOSE_EVOLUTION_THRESHOLDS } from "@waddle/shared";
+import { GooseStage, NEXT_STAGE } from "@waddle/shared";
 
 const STAGE_NAMES: Record<GooseStage, string> = {
   [GooseStage.EGG]: "Egg",
@@ -30,28 +30,28 @@ function getTodayMessage() {
 
 export default function Dashboard() {
   const { user } = useAuthStore();
-  const { goose, fetchGoose, getEvolutionProgress } = useGooseStore();
+  const { goose, fetchGoose, getEvolutionProgress, subscribeToGoose } = useGooseStore();
 
   useEffect(() => {
-    if (user?.id) fetchGoose(user.id);
-  }, [user?.id, fetchGoose]);
+    if (user?.id) {
+      fetchGoose(user.id);
+      // Subscribe to realtime goose updates (stage, accessories, evolution_points)
+      const unsubscribe = subscribeToGoose(user.id);
+      return unsubscribe;
+    }
+  }, [user?.id, fetchGoose, subscribeToGoose]);
 
   const stage = goose?.stage ?? GooseStage.EGG;
   const nextStage = NEXT_STAGE[stage];
-  const progress = user
-    ? getEvolutionProgress(user.pointsTotal)
-    : { current: 0, needed: 100, percentage: 0 };
-  const totalThreshold = GOOSE_EVOLUTION_THRESHOLDS[nextStage ?? GooseStage.GOOSE] ?? 0;
-
-  // silence unused var warning
-  void totalThreshold;
+  // Evolution progress is now based on goose.evolutionPoints, not user.pointsTotal
+  const progress = getEvolutionProgress();
 
   return (
     <div className="min-h-screen bg-cream">
       <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* LEFT: Goose hero */}
-        <div className="lg:col-span-1 flex flex-col gap-4">
+        {/* LEFT */}
+        <div className="lg:col-span-1 flex flex-col gap-3">
 
           {/* Hero card */}
           <div className="card p-6 flex flex-col items-center text-center gap-4">
@@ -60,12 +60,7 @@ export default function Dashboard() {
               <h1 className="font-display text-2xl font-black text-forest">{user?.username}!</h1>
             </div>
 
-            <GooseAvatar
-              stage={stage}
-              accessories={goose?.accessories}
-              size="xl"
-              animated
-            />
+            <GooseAvatar stage={stage} accessories={goose?.accessories} size="xl" animated />
 
             <span className="inline-block px-4 py-1.5 rounded-full bg-avocado/10 text-avocado text-sm font-bold border-2 border-avocado/20">
               {STAGE_NAMES[stage]}
@@ -97,57 +92,63 @@ export default function Dashboard() {
                     }}
                   />
                 </div>
+                <p className="text-xs text-forest/40 mt-1.5 font-medium">
+                  Feed your goose in the Shop to evolve it!
+                </p>
               </div>
             ) : (
-              <p className="text-sm font-bold text-avocado">Maximum evolution! You are a legend!</p>
+              <p className="text-sm font-bold text-avocado">Maximum evolution! 🪿</p>
             )}
           </div>
 
-          {/* Nav cards */}
-          <Link to="/shop" className="card p-4 flex items-center gap-4 hover:shadow-card-hover transition-all group">
-            <div className="w-12 h-12 rounded-2xl bg-avocado flex items-center justify-center shrink-0">
-              <ShoppingBag className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="font-display font-black text-forest text-base">Shop</p>
-              <p className="text-forest/50 text-xs font-medium">Feed and accessorize</p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-forest/30 group-hover:text-avocado transition-colors" />
-          </Link>
-
-          <Link to="/flock-party" className="card p-4 flex items-center gap-4 hover:shadow-card-hover transition-all group">
-            <div className="w-12 h-12 rounded-2xl bg-ocean flex items-center justify-center shrink-0">
-              <Users className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="font-display font-black text-forest text-base">Flock Party</p>
-              <p className="text-forest/50 text-xs font-medium">Study with friends</p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-forest/30 group-hover:text-ocean transition-colors" />
-          </Link>
-
-          <Link to="/games" className="card p-4 flex items-center gap-4 hover:shadow-card-hover transition-all group">
-            <div className="w-12 h-12 rounded-2xl bg-olive flex items-center justify-center shrink-0">
-              <Gamepad2 className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="font-display font-black text-forest text-base">Games</p>
-              <p className="text-forest/50 text-xs font-medium">Play solo or in a flock</p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-forest/30 group-hover:text-olive transition-colors" />
-          </Link>
+          {/* Nav icons */}
+          <div className="grid grid-cols-3 gap-3">
+            <Link
+              to="/shop"
+              className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all hover:scale-105 active:scale-95 border-2 border-white/40"
+              style={{ background: "#898433" }}
+            >
+              <ShoppingBag className="w-7 h-7 text-white" />
+              <span className="text-xs font-bold text-white">Shop</span>
+            </Link>
+            <Link
+              to="/flock-party"
+              className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all hover:scale-105 active:scale-95 border-2 border-white/40"
+              style={{ background: "#7E9DA2" }}
+            >
+              <Users className="w-7 h-7 text-white" />
+              <span className="text-xs font-bold text-white">Flock</span>
+            </Link>
+            <Link
+              to="/games"
+              className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all hover:scale-105 active:scale-95 border-2 border-white/40"
+              style={{ background: "#45441A" }}
+            >
+              <Gamepad2 className="w-7 h-7 text-white" />
+              <span className="text-xs font-bold text-white">Games</span>
+            </Link>
+          </div>
         </div>
 
         {/* RIGHT: Tasks */}
         <div className="lg:col-span-2">
           <div className="card p-6">
-            <div className="mb-4">
-              <h2 className="font-display text-xl font-black text-forest">Today's Tasks</h2>
-              <p className="text-forest/50 text-sm font-medium">
-                {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-              </p>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="font-display text-xl font-black text-forest">Today's Tasks</h2>
+                <p className="text-forest/50 text-sm font-medium">
+                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                </p>
+              </div>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent("waddle:add-tasks"))}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition-all hover:scale-105 active:scale-95"
+                style={{ background: "#898433" }}
+              >
+                + Add Tasks
+              </button>
             </div>
-            <TaskList compact />
+            <TaskList compact hideFloatingButton />
           </div>
         </div>
 

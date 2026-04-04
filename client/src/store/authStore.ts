@@ -38,6 +38,42 @@ async function fetchProfile(userId: string): Promise<User | null> {
   };
 }
 
+// Hold a reference to the realtime channel so we can clean it up on sign-out
+let profileChannel: ReturnType<typeof supabase.channel> | null = null;
+
+function subscribeToProfile(userId: string) {
+  // Clean up any existing subscription first
+  if (profileChannel) {
+    supabase.removeChannel(profileChannel);
+    profileChannel = null;
+  }
+
+  profileChannel = supabase
+    .channel(`profile:${userId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "profiles",
+        filter: `id=eq.${userId}`,
+      },
+      (payload) => {
+        const data = payload.new as Record<string, unknown>;
+        useAuthStore.setState((state) => ({
+          user: state.user
+            ? {
+              ...state.user,
+              pointsTotal: (data.points_total as number) ?? state.user.pointsTotal,
+              pointsAvailable: (data.points_available as number) ?? state.user.pointsAvailable,
+            }
+            : null,
+        }));
+      }
+    )
+    .subscribe();
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   supabaseUser: null,
@@ -53,6 +89,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (session?.user) {
       const profile = await fetchProfile(session.user.id);
       set({ session, supabaseUser: session.user, user: profile, loading: false });
+      subscribeToProfile(session.user.id);
     } else {
       set({ session: null, supabaseUser: null, user: null, loading: false });
     }
@@ -61,7 +98,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (event === "SIGNED_IN" && session?.user) {
         const profile = await fetchProfile(session.user.id);
         set({ session, supabaseUser: session.user, user: profile });
+        subscribeToProfile(session.user.id);
       } else if (event === "SIGNED_OUT") {
+        if (profileChannel) {
+          supabase.removeChannel(profileChannel);
+          profileChannel = null;
+        }
         set({ session: null, supabaseUser: null, user: null });
       } else if (event === "TOKEN_REFRESHED" && session) {
         set({ session });
@@ -82,6 +124,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (data.session?.user) {
       const profile = await fetchProfile(data.session.user.id);
       set({ session: data.session, supabaseUser: data.session.user, user: profile, loading: false });
+      subscribeToProfile(data.session.user.id);
     }
   },
 
@@ -102,6 +145,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (data.session?.user) {
       const profile = await fetchProfile(data.session.user.id);
       set({ session: data.session, supabaseUser: data.session.user, user: profile, loading: false });
+      subscribeToProfile(data.session.user.id);
     } else {
       set({ loading: false });
     }
@@ -109,6 +153,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     set({ loading: true });
+    if (profileChannel) {
+      supabase.removeChannel(profileChannel);
+      profileChannel = null;
+    }
     await supabase.auth.signOut();
     set({ user: null, supabaseUser: null, session: null, loading: false });
   },

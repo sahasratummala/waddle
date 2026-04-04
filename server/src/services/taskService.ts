@@ -5,8 +5,8 @@ import { TaskCategory } from "@waddle/shared";
 const VALID_CATEGORIES = Object.values(TaskCategory);
 
 function clampPoints(points: number, isSelfCare: boolean): number {
-  if (isSelfCare) return Math.min(Math.max(points, 5), 30);
-  return Math.min(Math.max(points, 10), 100);
+  if (isSelfCare) return Math.min(Math.max(points, 3), 10);
+  return Math.min(Math.max(points, 5), 30);
 }
 
 function normalizeCategory(raw: string): TaskCategory {
@@ -26,7 +26,7 @@ CRITICAL RULES — read carefully:
 3. Tasks must be high-level and outcome-focused, not procedural micro-steps.
 4. Add 1–2 self-care tasks that fit naturally into their day (a walk, a meal, water, rest).
 5. estimatedMinutes: realistic total time for the whole task (e.g. "chem homework" = 60–90 min).
-6. points: based on effort — light 10–25, medium 30–60, heavy 65–100. Self-care 5–20.
+6. points: based on effort — light 5–10, medium 10–20, heavy 20–30. Self-care 3–10.
 7. category must be one of: ACADEMIC, WORK, PERSONAL, SELF_CARE, CREATIVE, FITNESS, OTHER
 8. urgent: set to true if the user signals urgency for that specific item — look for words like "ASAP", "urgent", "due today", "due tonight", "deadline", "need to do first", "priority", "must finish", "last minute". Self-care tasks are never urgent.
 9. Return ONLY valid JSON — no markdown, no extra text.
@@ -73,7 +73,7 @@ Return this exact JSON shape:
     console.error("Raw Gemini response:", text);
     throw new Error("Gemini returned invalid JSON. Please try again.");
   }
-  
+
   if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.selfCare)) {
     throw new Error("Gemini response missing tasks or selfCare arrays.");
   }
@@ -83,7 +83,7 @@ Return this exact JSON shape:
       title: String(task.title || "Task").slice(0, 200),
       description: String(task.description || "").slice(0, 500),
       estimatedMinutes: Math.max(5, Math.min(180, Number(task.estimatedMinutes) || 30)),
-      points: clampPoints(Number(task.points) || 20, false),
+      points: clampPoints(Number(task.points) || 10, false),
       category: normalizeCategory(task.category),
       urgent: Boolean(task.urgent),
     })),
@@ -91,7 +91,7 @@ Return this exact JSON shape:
       title: String(task.title || "Self Care").slice(0, 200),
       description: String(task.description || "").slice(0, 500),
       estimatedMinutes: Math.max(5, Math.min(60, Number(task.estimatedMinutes) || 15)),
-      points: clampPoints(Number(task.points) || 10, true),
+      points: clampPoints(Number(task.points) || 5, true),
       category: TaskCategory.SELF_CARE,
       urgent: false as const,
     })),
@@ -104,11 +104,6 @@ export interface VerificationResult {
   reason: string;
 }
 
-/**
- * Uses Gemini Vision to verify that a photo shows evidence of task completion.
- * imageData: base64-encoded image string (without the data:... prefix)
- * mimeType: e.g. "image/jpeg" or "image/png"
- */
 export async function verifyTaskPhoto(
   taskTitle: string,
   taskDescription: string,
@@ -122,7 +117,7 @@ Task: "${taskTitle}"
 Description: "${taskDescription}"
 
 Look at the photo and determine whether it provides reasonable evidence that the task was completed.
-Be generous — if the photo plausibly relates to the task, verify it. Only reject if the photo is clearly unrelated (e.g., a blank wall for a "went for a walk" task).
+Be generous — if the photo plausibly relates to the task, verify it. Only reject if the photo is clearly unrelated.
 
 Respond with ONLY this JSON (no markdown, no extra text):
 {
@@ -133,12 +128,7 @@ Respond with ONLY this JSON (no markdown, no extra text):
 
   const result = await geminiVision.generateContent([
     prompt,
-    {
-      inlineData: {
-        data: imageData,
-        mimeType,
-      },
-    },
+    { inlineData: { data: imageData, mimeType } },
   ]);
 
   const text = result.response.text();
@@ -148,7 +138,6 @@ Respond with ONLY this JSON (no markdown, no extra text):
     const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     parsed = JSON.parse(cleaned);
   } catch {
-    // If Gemini can't parse cleanly, default to verified with low confidence
     return { verified: true, confidence: "low", reason: "Could not parse verification response." };
   }
 

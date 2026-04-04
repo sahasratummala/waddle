@@ -14,7 +14,22 @@ interface GooseState {
   equipAccessory: (accessoryId: string) => Promise<void>;
   unequipAccessory: (accessoryId: string) => Promise<void>;
   evolve: () => Promise<void>;
-  getEvolutionProgress: (pointsTotal: number) => { current: number; needed: number; percentage: number };
+  getEvolutionProgress: () => { current: number; needed: number; percentage: number };
+  subscribeToGoose: (userId: string) => () => void;
+}
+
+async function buildEquippedAccessories(raw: { accessoryId: string; equippedAt: string }[]): Promise<EquippedAccessory[]> {
+  if (!raw.length) return [];
+  const { data } = await supabase
+    .from("accessories")
+    .select("*")
+    .in("id", raw.map((a) => a.accessoryId));
+  const accessoryMap = new Map((data ?? []).map((a) => [a.id, a]));
+  return raw.map((ea) => ({
+    accessoryId: ea.accessoryId,
+    equippedAt: ea.equippedAt,
+    accessory: accessoryMap.get(ea.accessoryId),
+  }));
 }
 
 export const useGooseStore = create<GooseState>((set, get) => ({
@@ -38,11 +53,15 @@ export const useGooseStore = create<GooseState>((set, get) => ({
     }
 
     if (data) {
+      const rawAccessories = (data.accessories as { accessoryId: string; equippedAt: string }[]) ?? [];
+      const accessories = await buildEquippedAccessories(rawAccessories);
+
       const goose: Goose = {
         id: data.id,
         userId: data.user_id,
         stage: data.stage as GooseStage,
-        accessories: (data.accessories as EquippedAccessory[]) ?? [],
+        accessories,
+        evolutionPoints: data.evolution_points ?? 0,
         createdAt: data.created_at,
       };
       set({ goose, loading: false });
@@ -79,8 +98,10 @@ export const useGooseStore = create<GooseState>((set, get) => ({
 
     if (res.ok) {
       const { data } = await res.json();
+      const rawAccessories = (data.accessories as { accessoryId: string; equippedAt: string }[]) ?? [];
+      const accessories = await buildEquippedAccessories(rawAccessories);
       set((state) => ({
-        goose: state.goose ? { ...state.goose, accessories: data.accessories } : null,
+        goose: state.goose ? { ...state.goose, accessories } : null,
       }));
     }
   },
@@ -101,8 +122,10 @@ export const useGooseStore = create<GooseState>((set, get) => ({
 
     if (res.ok) {
       const { data } = await res.json();
+      const rawAccessories = (data.accessories as { accessoryId: string; equippedAt: string }[]) ?? [];
+      const accessories = await buildEquippedAccessories(rawAccessories);
       set((state) => ({
-        goose: state.goose ? { ...state.goose, accessories: data.accessories } : null,
+        goose: state.goose ? { ...state.goose, accessories } : null,
       }));
     }
   },
@@ -127,20 +150,54 @@ export const useGooseStore = create<GooseState>((set, get) => ({
     }
   },
 
-  getEvolutionProgress: (pointsTotal: number) => {
+  subscribeToGoose: (userId: string) => {
+    const channel = supabase
+      .channel(`goose:${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "geese",
+          filter: `user_id=eq.${userId}`,
+        },
+        async (payload) => {
+          const data = payload.new;
+          const rawAccessories = (data.accessories as { accessoryId: string; equippedAt: string }[]) ?? [];
+          const accessories = await buildEquippedAccessories(rawAccessories);
+          set((state) => ({
+            goose: state.goose
+              ? {
+                ...state.goose,
+                stage: data.stage as GooseStage,
+                accessories,
+                evolutionPoints: data.evolution_points ?? 0,
+              }
+              : null,
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  },
+
+  getEvolutionProgress: () => {
     const { goose } = get();
     if (!goose) return { current: 0, needed: 100, percentage: 0 };
 
+    const pointsTotal = goose.evolutionPoints ?? 0;
     const currentStageThreshold = GOOSE_EVOLUTION_THRESHOLDS[goose.stage];
     const nextStage = NEXT_STAGE[goose.stage];
 
     if (!nextStage) {
-      // Already at max stage
       return { current: pointsTotal, needed: pointsTotal, percentage: 100 };
     }
 
     const nextStageThreshold = GOOSE_EVOLUTION_THRESHOLDS[nextStage];
-    const pointsInCurrentStage = pointsTotal - currentStageThreshold;
+    const pointsInCurrentStage = Math.max(0, pointsTotal - currentStageThreshold);
     const pointsNeededForNextStage = nextStageThreshold - currentStageThreshold;
     const percentage = Math.min(
       100,
