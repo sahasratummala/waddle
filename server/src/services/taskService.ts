@@ -56,12 +56,18 @@ Return this exact JSON shape:
 
   let parsed: TaskGenerationResult;
   try {
-    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const cleaned = text
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .replace(/^[^{[]*/, "")
+      .replace(/[^}\]]*$/, "")
+      .trim();
     parsed = JSON.parse(cleaned);
   } catch {
+    console.error("Raw Gemini response:", text);
     throw new Error("Gemini returned invalid JSON. Please try again.");
   }
-
+  
   if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.selfCare)) {
     throw new Error("Gemini response missing tasks or selfCare arrays.");
   }

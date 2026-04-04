@@ -182,4 +182,44 @@ router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Re
   }
 });
 
+// POST /api/goose/feed — buy food to gain evolution points
+router.post("/feed", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { foodId, cost, evolutionPoints } = req.body as {
+    foodId?: string;
+    cost?: number;
+    evolutionPoints?: number;
+  };
+  const userId = req.userId!;
+
+  if (!foodId || !cost || !evolutionPoints) {
+    res.status(400).json({ success: false, error: "foodId, cost, and evolutionPoints are required." });
+    return;
+  }
+
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("points_available")
+      .eq("id", userId)
+      .single();
+
+    if ((profile?.points_available ?? 0) < cost) {
+      res.status(400).json({ success: false, error: "Not enough points." });
+      return;
+    }
+
+    await supabaseAdmin
+      .from("profiles")
+      .update({ points_available: (profile?.points_available ?? 0) - cost })
+      .eq("id", userId);
+
+    const { awardPoints } = await import("../services/pointsService");
+    const result = await awardPoints(userId, evolutionPoints, `Fed goose: ${foodId}`);
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: "Failed to feed goose." });
+  }
+});
+
 export default router;

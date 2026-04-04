@@ -10,15 +10,13 @@ function PasswordStrength({ password }: { password: string }) {
     { label: "Contains a number", pass: /\d/.test(password) },
     { label: "Contains a letter", pass: /[a-zA-Z]/.test(password) },
   ];
-
   if (!password) return null;
-
   return (
     <div className="mt-2 flex flex-col gap-1">
       {checks.map(({ label, pass }) => (
         <div key={label} className="flex items-center gap-1.5 text-xs">
-          <CheckCircle className="w-3.5 h-3.5" style={{ color: pass ? "#7E9DA2" : "rgba(229,222,202,0.2)" }} />
-          <span style={{ color: pass ? "rgba(229,222,202,0.65)" : "rgba(229,222,202,0.3)" }}>{label}</span>
+          <CheckCircle className="w-3.5 h-3.5" style={{ color: pass ? "#7E9DA2" : "rgb(40 44 21 / 0.2)" }} />
+          <span className="font-medium" style={{ color: pass ? "#45441A" : "rgb(40 44 21 / 0.35)" }}>{label}</span>
         </div>
       ))}
     </div>
@@ -28,7 +26,6 @@ function PasswordStrength({ password }: { password: string }) {
 export default function Register() {
   const { signUp, loading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
-
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +37,6 @@ export default function Register() {
     e.preventDefault();
     setLocalError("");
     clearError();
-
     if (!email.trim() || !username.trim() || !password.trim()) {
       setLocalError("Please fill in all fields.");
       return;
@@ -53,15 +49,11 @@ export default function Register() {
       setLocalError("Password must be at least 8 characters.");
       return;
     }
-
     try {
       await signUp(email.trim(), password, username.trim());
       const { user } = useAuthStore.getState();
-      if (user) {
-        navigate("/dashboard");
-      } else {
-        setEmailSent(true);
-      }
+      if (user) navigate("/dashboard");
+      else setEmailSent(true);
     } catch {
       // error in store
     }
@@ -71,20 +63,17 @@ export default function Register() {
 
   if (emailSent) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="relative z-10 w-full max-w-sm text-center">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
-            style={{ background: "rgba(126,157,162,0.2)", border: "2px solid rgba(126,157,162,0.45)" }}>
+      <div className="min-h-screen bg-cream flex items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 bg-ocean/15 border-2 border-ocean/30">
             <CheckCircle className="w-8 h-8 text-ocean" />
           </div>
-          <h1 className="text-2xl font-display font-extrabold text-cream mb-3">Check your email!</h1>
-          <p className="text-sm mb-6" style={{ color: "rgba(229,222,202,0.55)" }}>
-            We sent a confirmation link to{" "}
-            <strong className="text-cream">{email}</strong>.
-            Click the link to activate your account and start waddling.
+          <h1 className="font-display text-2xl font-black text-forest mb-3">Check your email!</h1>
+          <p className="text-sm mb-6 text-forest/55 font-medium">
+            We sent a confirmation link to <strong className="text-forest">{email}</strong>. Click it to activate your account.
           </p>
           <Link to="/login">
-            <Button variant="primary" fullWidth>Go to Sign In</Button>
+            <Button variant="primary" fullWidth className="rounded-xl font-black">Go to Sign In</Button>
           </Link>
         </div>
       </div>
@@ -92,33 +81,21 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl"
-          style={{ background: "rgba(137,132,51,0.07)" }} />
-        <div className="absolute bottom-0 -left-40 w-80 h-80 rounded-full blur-3xl"
-          style={{ background: "rgba(126,157,162,0.06)" }} />
-      </div>
-
-      <div className="relative z-10 w-full max-w-sm">
+    <div className="min-h-screen bg-cream flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <Link to="/" className="flex items-center gap-2.5 group mb-3">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center transition-all group-hover:scale-105"
-              style={{ background: "rgba(137,132,51,0.18)", border: "2px solid rgba(137,132,51,0.45)" }}>
+          <Link to="/" className="flex items-center gap-2.5 mb-4">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-avocado/15 border-2 border-avocado/30">
               <Bird className="w-7 h-7 text-avocado" />
             </div>
           </Link>
-          <h1 className="text-2xl font-display font-extrabold text-cream">Hatch your egg</h1>
-          <p className="text-sm mt-1" style={{ color: "rgba(229,222,202,0.5)" }}>
-            Create your free Waddle account
-          </p>
+          <h1 className="font-display text-3xl font-black text-forest">Hatch your egg</h1>
+          <p className="text-sm text-forest/50 font-medium mt-1">Create your free Waddle account</p>
         </div>
 
-        <div className="rounded-2xl p-7 shadow-xl shadow-black/40"
-          style={{ background: "#45441A", border: "1px solid rgba(229,222,202,0.1)" }}>
+        <div className="card p-7">
           {displayError && (
-            <div className="flex items-start gap-2.5 p-3 mb-5 rounded-lg text-sm"
-              style={{ background: "rgba(192,57,43,0.12)", border: "1px solid rgba(192,57,43,0.25)", color: "#E88080" }}>
+            <div className="flex items-start gap-2.5 p-3 mb-5 rounded-xl text-sm bg-red-50 border-2 border-red-200 text-red-600">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{displayError}</span>
             </div>
@@ -126,42 +103,32 @@ export default function Register() {
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "rgba(229,222,202,0.7)" }}>
-                Username
-              </label>
+              <label className="block text-sm font-bold text-forest mb-1.5">Username</label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="goose_master"
                 className="input-base"
-                autoComplete="username"
                 autoFocus
                 required
                 minLength={2}
                 maxLength={30}
               />
             </div>
-
             <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "rgba(229,222,202,0.7)" }}>
-                Email address
-              </label>
+              <label className="block text-sm font-bold text-forest mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 className="input-base"
-                autoComplete="email"
                 required
               />
             </div>
-
             <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "rgba(229,222,202,0.7)" }}>
-                Password
-              </label>
+              <label className="block text-sm font-bold text-forest mb-1.5">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -169,51 +136,32 @@ export default function Register() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="input-base pr-10"
-                  autoComplete="new-password"
                   required
                   minLength={8}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-3 flex items-center transition-colors"
-                  style={{ color: "rgba(229,222,202,0.4)" }}
+                  className="absolute inset-y-0 right-3 flex items-center text-forest/40 hover:text-forest"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               <PasswordStrength password={password} />
             </div>
-
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              isLoading={loading}
-              size="md"
-              className="mt-1"
-            >
+            <Button type="submit" variant="primary" fullWidth isLoading={loading} size="md" className="mt-1 rounded-xl font-black">
               Create Account
             </Button>
           </form>
 
-          <p className="text-center text-xs mt-4" style={{ color: "rgba(229,222,202,0.3)" }}>
-            By creating an account, you agree to our Terms and Privacy Policy.
-          </p>
-
-          <p className="text-center text-sm mt-4" style={{ color: "rgba(229,222,202,0.4)" }}>
+          <p className="text-center text-sm mt-5 text-forest/50 font-medium">
             Already have an account?{" "}
-            <Link to="/login" className="text-avocado font-medium hover:text-primary-300 transition-colors">
-              Sign in
-            </Link>
+            <Link to="/login" className="text-avocado font-black hover:text-olive transition-colors">Sign in</Link>
           </p>
         </div>
 
-        <p className="text-center text-xs mt-5">
-          <Link to="/" style={{ color: "rgba(229,222,202,0.25)" }}
-            className="hover:text-cream/50 transition-colors">
-            ← Back to home
-          </Link>
+        <p className="text-center text-xs mt-4">
+          <Link to="/" className="text-forest/30 font-medium hover:text-forest/60 transition-colors">Back to home</Link>
         </p>
       </div>
     </div>

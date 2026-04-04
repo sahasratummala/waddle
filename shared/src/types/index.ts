@@ -58,7 +58,17 @@ export interface Accessory {
   description: string;
   imageUrl?: string;
   cost: number;
-  category: "hat" | "scarf" | "glasses" | "bag" | "other";
+  category: "hat" | "scarf" | "glasses" | "necklace" | "bow" | "tie";
+  unlockedAtStage: GooseStage;
+}
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  description: string;
+  imageUrl?: string;
+  cost: number;
+  evolutionPoints: number;
   unlockedAtStage: GooseStage;
 }
 
@@ -97,7 +107,7 @@ export interface PointTransaction {
 export interface DailyTask {
   id: string;
   userId: string;
-  date: string; // ISO date string YYYY-MM-DD
+  date: string;
   title: string;
   description: string;
   estimatedMinutes: number;
@@ -105,7 +115,7 @@ export interface DailyTask {
   category: TaskCategory;
   isSelfCare: boolean;
   completed: boolean;
-  photoUrl?: string; // photo verification URL
+  photoUrl?: string;
   createdAt: string;
 }
 
@@ -135,22 +145,22 @@ export interface StudyConfig {
   breakDurationMinutes: number;
   totalCycles?: number;             // How many study rounds to complete
   longBreakDurationMinutes?: number;
-  sessionsBeforeLongBreak?: number; // Pomodoro-specific
-  minimumSessionMinutes?: number;   // Flowmodoro-specific
-  blocks?: TimeBlock[];             // Time Blocking-specific
+  sessionsBeforeLongBreak?: number;
+  minimumSessionMinutes?: number;
+  blocks?: TimeBlock[];
 }
 
 export interface TimeBlock {
   label: string;
-  startTime: string; // HH:mm
-  endTime: string;   // HH:mm
+  startTime: string;
+  endTime: string;
 }
 
 // ─── Flock Party / Room ───────────────────────────────────────────────────────
 
 export interface FlockParty {
   id: string;
-  code: string; // 6-char room code
+  code: string;
   hostId: string;
   studyStyle: StudyStyle;
   studyConfig: StudyConfig;
@@ -192,7 +202,7 @@ export interface Message {
   createdAt: string;
 }
 
-// ─── Socket Events (shared payloads) ─────────────────────────────────────────
+// ─── Socket Events ────────────────────────────────────────────────────────────
 
 export interface JoinRoomPayload {
   roomCode: string;

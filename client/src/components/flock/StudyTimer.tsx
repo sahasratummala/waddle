@@ -34,58 +34,54 @@ export default function StudyTimer({
   const elapsed = totalSeconds - timerState.secondsRemaining;
   const progress = totalSeconds > 0 ? Math.min(elapsed / totalSeconds, 1) : 0;
 
-  const totalCycles = studyConfig.totalCycles;
+  const totalCycles = (studyConfig as any).totalCycles;
   const sessionNumber = timerState.sessionNumber;
 
   if (!isStudying && !isOnBreak) return null;
 
   return (
-    <div className="bg-background-card border border-white/10 rounded-2xl p-6 text-center">
-      {/* Phase badge */}
+    <div className="card p-6 text-center">
       <div
-        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-5 ${
-          isStudying
-            ? "bg-accent/15 text-accent border border-accent/25"
-            : "bg-primary/15 text-primary border border-primary/25"
-        }`}
+        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold mb-5 border-2 ${isStudying
+            ? "bg-ocean/10 text-ocean border-ocean/20"
+            : "bg-avocado/10 text-avocado border-avocado/20"
+          }`}
       >
         <Timer className="w-4 h-4" />
         {isStudying ? "Study Phase" : "Break Time"}
         {totalCycles && (
-          <span className="opacity-70">— Cycle {sessionNumber} of {totalCycles}</span>
+          <span className="opacity-60 font-semibold">
+            {" "}Cycle {sessionNumber} of {totalCycles}
+          </span>
         )}
       </div>
 
-      {/* Time display */}
       <div
-        className={`text-7xl sm:text-8xl font-display font-extrabold tabular-nums mb-3 ${
-          isStudying ? "text-white" : "text-primary"
-        }`}
+        className={`text-7xl sm:text-8xl font-display font-black tabular-nums mb-3 ${isStudying ? "text-forest" : "text-avocado"
+          }`}
       >
         {formatTime(timerState.secondsRemaining)}
       </div>
 
-      {/* Progress bar */}
-      <div className="w-full h-1.5 bg-white/8 rounded-full mb-4 overflow-hidden">
+      <div className="w-full h-2 bg-forest/10 rounded-full mb-4 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-1000 ${
-            isStudying ? "bg-accent" : "bg-primary"
-          }`}
+          className={`h-full rounded-full transition-all duration-1000 ${isStudying ? "bg-ocean" : "bg-avocado"
+            }`}
           style={{ width: `${progress * 100}%` }}
         />
       </div>
 
-      <p className="text-white/40 text-sm mb-4">
+      <p className="text-forest/40 text-sm mb-4 font-medium">
         {isStudying
-          ? "Stay focused. Your goose is watching. 🪿"
-          : "Rest up — the Game Hub is open below!"}
+          ? "Stay focused. Your goose is watching."
+          : "Rest up. The Game Hub is open below!"}
       </p>
 
       {isHost && isStudying && (
         <Button
           variant="ghost"
           size="sm"
-          className="text-white/40 hover:text-white/70"
+          className="text-forest/40 hover:text-forest"
           onClick={onEndEarly}
           leftIcon={<Square className="w-3.5 h-3.5" />}
         >

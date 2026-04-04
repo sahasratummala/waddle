@@ -1,0 +1,58 @@
+import { FoodItem, GooseStage } from "@waddle/shared";
+
+export const FOOD_ITEMS: FoodItem[] = [
+    {
+        id: "breadcrumb",
+        name: "Breadcrumb",
+        description: "A humble beginning",
+        cost: 10,
+        evolutionPoints: 10,
+        unlockedAtStage: GooseStage.EGG,
+        imageUrl: "/food/breadcrumb.png",
+    },
+    {
+        id: "seed",
+        name: "Seed",
+        description: "Nutritious little guy",
+        cost: 25,
+        evolutionPoints: 25,
+        unlockedAtStage: GooseStage.EGG,
+        imageUrl: "/food/seed.png",
+    },
+    {
+        id: "corn",
+        name: "Corn",
+        description: "Getting fancy",
+        cost: 50,
+        evolutionPoints: 50,
+        unlockedAtStage: GooseStage.HATCHLING,
+        imageUrl: "/food/corn.png",
+    },
+    {
+        id: "berry",
+        name: "Berry",
+        description: "Sweet and juicy",
+        cost: 75,
+        evolutionPoints: 75,
+        unlockedAtStage: GooseStage.HATCHLING,
+        imageUrl: "/food/berry.png",
+    },
+    {
+        id: "fish",
+        name: "Fish",
+        description: "Protein packed",
+        cost: 100,
+        evolutionPoints: 100,
+        unlockedAtStage: GooseStage.GOSLING,
+        imageUrl: "/food/fish.png",
+    },
+    {
+        id: "fancy_grain",
+        name: "Fancy Grain",
+        description: "Gourmet stuff",
+        cost: 150,
+        evolutionPoints: 150,
+        unlockedAtStage: GooseStage.GOSLING,
+        imageUrl: "/food/fancy_grain.png",
+    },
+];

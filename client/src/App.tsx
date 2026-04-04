@@ -10,6 +10,7 @@ import DailyTasks from "@/pages/DailyTasks";
 import FlockParty from "@/pages/FlockParty";
 import FlockPartyRoom from "@/pages/FlockPartyRoom";
 import Shop from "@/pages/Shop";
+import Games from "@/pages/Games";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -125,6 +126,17 @@ export default function App() {
           <ProtectedRoute>
             <Layout>
               <Shop />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/games"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Games />
             </Layout>
           </ProtectedRoute>
         }

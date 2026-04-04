@@ -2,23 +2,18 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   darkMode: ["class"],
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
-        // Waddle brand palette
-        cream:   "#E5DECA",
-        ocean:   "#7E9DA2",
+        cream: "#E5DECA",
+        ocean: "#7E9DA2",
         avocado: "#898433",
-        olive:   "#45441A",
-        forest:  "#282C15",
-
+        olive: "#45441A",
+        forest: "#282C15",
         primary: {
-          DEFAULT: "#898433",  // Avocado
-          50:  "#F5F4E8",
+          DEFAULT: "#898433",
+          50: "#F5F4E8",
           100: "#E8E6C8",
           200: "#CFCB93",
           300: "#B6B060",
@@ -30,11 +25,11 @@ const config: Config = {
           900: "#141308",
         },
         secondary: {
-          DEFAULT: "#7E9DA2",  // Ocean Blue
-          50:  "#EEF4F5",
+          DEFAULT: "#7E9DA2",
+          50: "#EEF4F5",
           100: "#D5E5E8",
           200: "#ABCBD1",
-          300: "#7E9DA2",  // ← base
+          300: "#7E9DA2",
           400: "#6A8A90",
           500: "#56777D",
           600: "#42646A",
@@ -43,60 +38,44 @@ const config: Config = {
           900: "#0F1B1D",
         },
         background: {
-          DEFAULT: "#282C15",  // Dark Green
-          card:    "#45441A",  // Olive
-          light:   "#45441A",  // Alias (backwards compat)
-          surface: "#343618",  // between olive & forest
-          muted:   "#3A3C1C",
+          DEFAULT: "#E5DECA",
+          card: "#ffffff",
+          surface: "#F5F2EA",
+          muted: "#EDE8DC",
+          light: "#ffffff",
         },
-
-        // Semantic aliases
-        accent:  "#7E9DA2",  // Ocean alias used for self-care / success states
+        accent: "#7E9DA2",
         success: "#7E9DA2",
         warning: "#898433",
-        error:   "#C0392B",
-        info:    "#7E9DA2",
-      },
-      textColor: {
-        DEFAULT: "#E5DECA",
+        error: "#C0392B",
+        info: "#7E9DA2",
       },
       fontFamily: {
-        sans:    ["Inter", "system-ui", "sans-serif"],
+        sans: ["DM Sans", "system-ui", "sans-serif"],
         display: ["Nunito", "system-ui", "sans-serif"],
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "1rem",
+        md: "0.75rem",
+        sm: "0.5rem",
+      },
+      boxShadow: {
+        card: "0 2px 12px rgb(40 44 21 / 0.08)",
+        "card-hover": "0 4px 20px rgb(40 44 21 / 0.12)",
       },
       animation: {
-        "waddle":       "waddle 0.5s ease-in-out infinite alternate",
-        "float":        "float 3s ease-in-out infinite",
-        "pulse-glow":   "pulseGlow 2s ease-in-out infinite",
-        "bounce-soft":  "bounceSoft 1s ease-in-out infinite",
+        "float": "float 3s ease-in-out infinite",
+        "bounce-soft": "bounceSoft 1s ease-in-out infinite",
       },
       keyframes: {
-        waddle: {
-          "0%":   { transform: "rotate(-5deg)" },
-          "100%": { transform: "rotate(5deg)" },
-        },
         float: {
           "0%, 100%": { transform: "translateY(0px)" },
-          "50%":      { transform: "translateY(-10px)" },
-        },
-        pulseGlow: {
-          "0%, 100%": { boxShadow: "0 0 5px #898433" },
-          "50%":      { boxShadow: "0 0 20px #898433, 0 0 40px #45441A" },
+          "50%": { transform: "translateY(-10px)" },
         },
         bounceSoft: {
           "0%, 100%": { transform: "translateY(0)" },
-          "50%":      { transform: "translateY(-6px)" },
+          "50%": { transform: "translateY(-6px)" },
         },
-      },
-      backgroundImage: {
-        "gradient-waddle":  "linear-gradient(135deg, #282C15 0%, #45441A 60%, #343618 100%)",
-        "gradient-primary": "linear-gradient(135deg, #898433 0%, #6E6A28 100%)",
-        "gradient-ocean":   "linear-gradient(135deg, #7E9DA2 0%, #56777D 100%)",
       },
     },
   },
