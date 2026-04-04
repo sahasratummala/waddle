@@ -8,7 +8,7 @@ import Button from "@/components/ui/Button";
 import { RoomStatus, StudyStyle } from "@waddle/shared";
 import { getSocket } from "@/lib/socket";
 
-// Flock-specific components (Navvya's section — components/flock/)
+// Flock-specific components
 import StudyTimer from "@/components/flock/StudyTimer";
 import ParticipantList from "@/components/flock/ParticipantList";
 import ChatPanel from "@/components/flock/ChatPanel";
@@ -31,12 +31,23 @@ export default function FlockPartyRoom() {
   const { roomCode } = useParams<{ roomCode: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { room, timerState, messages, leaveRoom, startStudy, sendMessage } = useFlockStore();
+  
+  // Notice we pull joinRoom out of the store now
+  const { room, timerState, messages, joinRoom, leaveRoom, startStudy, sendMessage } = useFlockStore();
 
   const [codeCopied, setCodeCopied] = useState(false);
   const [completionData, setCompletionData] = useState<CompletionData | null>(null);
 
-  // Listen for study-complete from server to capture completion summary
+  // Auto-join logic if someone pastes a room code link directly into a new tab
+  useEffect(() => {
+    if (!room && roomCode) {
+      joinRoom(roomCode).catch(() => {
+        // If joining fails (bad code or not logged in), kick them back to safety
+        navigate("/flock-party");
+      });
+    }
+  }, [room, roomCode, joinRoom, navigate]);
+
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
@@ -47,10 +58,6 @@ export default function FlockPartyRoom() {
     socket.on("study-complete", handler);
     return () => { socket.off("study-complete", handler); };
   }, []);
-
-  useEffect(() => {
-    if (!roomCode) navigate("/flock-party");
-  }, [roomCode, navigate]);
 
   function handleCopyCode() {
     if (roomCode) {

@@ -3,7 +3,7 @@ import type { FlockParty, StudyConfig, Participant } from "@waddle/shared";
 import { RoomStatus, StudyStyle, GooseStage } from "@waddle/shared";
 
 function generateRoomCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Omit O/0, I/1 for readability
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; 
   let code = "";
   for (let i = 0; i < 6; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
@@ -17,7 +17,7 @@ async function isCodeUnique(code: string): Promise<boolean> {
     .select("id")
     .eq("code", code)
     .in("status", [RoomStatus.LOBBY, RoomStatus.STUDYING, RoomStatus.BREAK, RoomStatus.GAME])
-    .single();
+    .maybeSingle();
   return !data;
 }
 
@@ -37,18 +37,17 @@ async function generateUniqueCode(): Promise<string> {
 export async function createRoom(hostId: string, studyConfig: StudyConfig): Promise<FlockParty> {
   const code = await generateUniqueCode();
 
-  // Get host's profile
   const { data: hostProfile } = await supabaseAdmin
     .from("profiles")
     .select("username, avatar_url")
     .eq("id", hostId)
-    .single();
+    .maybeSingle();
 
   const { data: hostGoose } = await supabaseAdmin
     .from("geese")
     .select("stage")
     .eq("user_id", hostId)
-    .single();
+    .maybeSingle();
 
   const { data: room, error } = await supabaseAdmin
     .from("rooms")
@@ -66,12 +65,15 @@ export async function createRoom(hostId: string, studyConfig: StudyConfig): Prom
     throw new Error("Failed to create room: " + (error?.message ?? "unknown error"));
   }
 
-  // Add host as first participant
-  await supabaseAdmin.from("room_participants").insert({
+  const { error: participantError } = await supabaseAdmin.from("room_participants").insert({
     room_id: room.id,
     user_id: hostId,
     points_earned: 0,
   });
+  
+  if (participantError) {
+     console.error("[Service] Failed to insert host participant:", participantError);
+  }
 
   const hostParticipant: Participant = {
     userId: hostId,
@@ -97,12 +99,11 @@ export async function createRoom(hostId: string, studyConfig: StudyConfig): Prom
 }
 
 export async function joinRoom(code: string, userId: string): Promise<FlockParty> {
-  // Find the room
   const { data: room, error } = await supabaseAdmin
     .from("rooms")
     .select("*")
     .eq("code", code)
-    .single();
+    .maybeSingle();
 
   if (error || !room) {
     throw new Error("Room not found. Check the code and try again.");
@@ -112,23 +113,30 @@ export async function joinRoom(code: string, userId: string): Promise<FlockParty
     throw new Error("This room has ended.");
   }
 
-  // Check if already a participant
   const { data: existing } = await supabaseAdmin
     .from("room_participants")
     .select("user_id")
     .eq("room_id", room.id)
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
   if (!existing) {
-    await supabaseAdmin.from("room_participants").insert({
+    const { error: insertError } = await supabaseAdmin.from("room_participants").insert({
       room_id: room.id,
       user_id: userId,
       points_earned: 0,
     });
+    
+    if (insertError) {
+       console.error("[Service] Error inserting participant:", insertError);
+       throw new Error("Failed to join room database. Are you fully signed in?");
+    }
   }
 
-  return getRoomByCode(code) as Promise<FlockParty>;
+  const updatedRoom = await getRoomByCode(code);
+  if (!updatedRoom) throw new Error("Room state could not be fetched after joining.");
+  
+  return updatedRoom;
 }
 
 export async function getRoomByCode(code: string): Promise<FlockParty | null> {
@@ -136,11 +144,10 @@ export async function getRoomByCode(code: string): Promise<FlockParty | null> {
     .from("rooms")
     .select("*, room_participants(user_id, points_earned, joined_at)")
     .eq("code", code)
-    .single();
+    .maybeSingle();
 
   if (error || !room) return null;
 
-  // Fetch participant profiles and geese
   const participantIds: string[] = (room.room_participants ?? []).map(
     (p: { user_id: string }) => p.user_id
   );
@@ -201,7 +208,7 @@ export async function addParticipantPoints(
     .select("points_earned")
     .eq("room_id", roomId)
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
   await supabaseAdmin
     .from("room_participants")

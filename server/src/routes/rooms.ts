@@ -6,6 +6,7 @@ const router = Router();
 
 // POST /api/rooms/create
 router.post("/create", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  console.log(`[Rooms] Create room requested by: ${req.userId}`);
   const { studyConfig } = req.body;
   const userId = req.userId!;
 
@@ -16,9 +17,10 @@ router.post("/create", requireAuth, async (req: AuthenticatedRequest, res: Respo
 
   try {
     const room = await createRoom(userId, studyConfig);
+    console.log(`[Rooms] Room created successfully: ${room.code}`);
     res.status(201).json({ success: true, data: { room } });
   } catch (err) {
-    console.error("Create room error:", err);
+    console.error("[Rooms] Create room error:", err);
     const message = err instanceof Error ? err.message : "Failed to create room.";
     res.status(500).json({ success: false, error: message });
   }
@@ -26,6 +28,7 @@ router.post("/create", requireAuth, async (req: AuthenticatedRequest, res: Respo
 
 // POST /api/rooms/join
 router.post("/join", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  console.log(`[Rooms] Join room requested for code: ${req.body?.roomCode}`);
   const { roomCode } = req.body as { roomCode?: string };
   const userId = req.userId!;
 
@@ -36,8 +39,10 @@ router.post("/join", requireAuth, async (req: AuthenticatedRequest, res: Respons
 
   try {
     const room = await joinRoom(roomCode.trim().toUpperCase(), userId);
+    console.log(`[Rooms] Successfully joined room: ${room.code}`);
     res.json({ success: true, data: { room } });
   } catch (err) {
+    console.error("[Rooms] Join room error:", err);
     const message = err instanceof Error ? err.message : "Failed to join room.";
     const status = message.includes("not found") ? 404 : message.includes("ended") ? 400 : 500;
     res.status(status).json({ success: false, error: message });
@@ -56,6 +61,7 @@ router.get("/:roomCode", requireAuth, async (req: AuthenticatedRequest, res: Res
     }
     res.json({ success: true, data: { room } });
   } catch (err) {
+    console.error("[Rooms] Get room error:", err);
     res.status(500).json({ success: false, error: "Failed to fetch room." });
   }
 });

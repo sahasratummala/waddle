@@ -34,7 +34,6 @@ function randomWord(): string {
   return PICTIONARY_WORDS[Math.floor(Math.random() * PICTIONARY_WORDS.length)];
 }
 
-// Add an underscore before 'score'
 function calculateGamePoints(gameType: GameType, _score: number, rank: number): number {
   const base: Record<GameType, number> = {
     [GameType.MAZE]: 30,

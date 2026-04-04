@@ -53,72 +53,80 @@ export const useFlockStore = create<FlockState>((set, get) => ({
   createRoom: async (studyConfig: StudyConfig) => {
     set({ loading: true, error: null });
 
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (!token) throw new Error("Not authenticated");
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) throw new Error("Not authenticated. Please log in.");
 
-    const res = await fetch("/api/rooms/create", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ studyConfig }),
-    });
+      const res = await fetch("/api/rooms/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studyConfig }),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      set({ loading: false, error: err.error });
-      throw new Error(err.error);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create room");
+      }
+
+      const { data } = await res.json();
+      set({ room: data.room, loading: false });
+
+      // Connect socket and join the room
+      const socket = connectSocket(token);
+      socket.emit("join-room", {
+        roomCode: data.room.code,
+        userId: session.data.session!.user.id,
+      });
+
+      get().setupSocketListeners();
+
+      return data.room.code as string;
+    } catch (err: any) {
+      set({ loading: false, error: err.message });
+      throw err;
     }
-
-    const { data } = await res.json();
-    set({ room: data.room, loading: false });
-
-    // Connect socket and join the room
-    const socket = connectSocket(token);
-    socket.emit("join-room", {
-      roomCode: data.room.code,
-      userId: session.data.session!.user.id,
-    });
-
-    get().setupSocketListeners();
-
-    return data.room.code as string;
   },
 
   joinRoom: async (roomCode: string) => {
     set({ loading: true, error: null });
 
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (!token) throw new Error("Not authenticated");
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) throw new Error("Not authenticated. Please log in.");
 
-    const res = await fetch("/api/rooms/join", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ roomCode }),
-    });
+      const res = await fetch("/api/rooms/join", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ roomCode }),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      set({ loading: false, error: err.error });
-      throw new Error(err.error);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to join room");
+      }
+
+      const { data } = await res.json();
+      set({ room: data.room, loading: false });
+
+      const socket = connectSocket(token);
+      socket.emit("join-room", {
+        roomCode,
+        userId: session.data.session!.user.id,
+      });
+
+      get().setupSocketListeners();
+    } catch (err: any) {
+      set({ loading: false, error: err.message });
+      throw err;
     }
-
-    const { data } = await res.json();
-    set({ room: data.room, loading: false });
-
-    const socket = connectSocket(token);
-    socket.emit("join-room", {
-      roomCode,
-      userId: session.data.session!.user.id,
-    });
-
-    get().setupSocketListeners();
   },
 
   leaveRoom: () => {
@@ -193,11 +201,27 @@ export const useFlockStore = create<FlockState>((set, get) => ({
     });
 
     socket.on("timer-tick", (timerState: TimerState) => {
-      set({ timerState });
+      set((state) => {
+        const updates: Partial<FlockState> = { timerState };
+        
+        // Ensure room status safely matches the current timer phase so the UI updates
+        if (state.room) {
+          if (timerState.phase === 'STUDY' && state.room.status !== RoomStatus.STUDYING) {
+            updates.room = { ...state.room, status: RoomStatus.STUDYING };
+          } else if (timerState.phase === 'BREAK' && state.room.status !== RoomStatus.BREAK) {
+            updates.room = { ...state.room, status: RoomStatus.BREAK };
+          }
+        }
+        return updates;
+      });
     });
 
     socket.on("break-start", (timerState: TimerState) => {
-      set({ timerState });
+      set((state) => ({
+        timerState,
+        // Crucial fix: Update the room status so the Game Hub triggers!
+        room: state.room ? { ...state.room, status: RoomStatus.BREAK } : null,
+      }));
     });
 
     socket.on("study-complete", () => {

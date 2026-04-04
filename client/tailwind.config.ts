@@ -45,11 +45,13 @@ const config: Config = {
         background: {
           DEFAULT: "#282C15",  // Dark Green
           card:    "#45441A",  // Olive
+          light:   "#45441A",  // Alias (backwards compat)
           surface: "#343618",  // between olive & forest
           muted:   "#3A3C1C",
         },
 
         // Semantic aliases
+        accent:  "#7E9DA2",  // Ocean alias used for self-care / success states
         success: "#7E9DA2",
         warning: "#898433",
         error:   "#C0392B",
