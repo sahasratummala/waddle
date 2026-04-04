@@ -16,19 +16,21 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary text-background font-semibold hover:bg-primary-500 active:bg-primary-600 " +
-    "shadow-lg shadow-primary/20 hover:shadow-primary/30",
+    "bg-avocado text-cream font-semibold " +
+    "hover:bg-primary-500 active:bg-primary-600 " +
+    "shadow-lg shadow-avocado/20 hover:shadow-avocado/30",
   secondary:
-    "bg-secondary text-white font-semibold hover:bg-secondary-500 active:bg-secondary-600 " +
-    "shadow-lg shadow-secondary/20 hover:shadow-secondary/30",
+    "bg-ocean text-forest font-semibold " +
+    "hover:bg-secondary-400 active:bg-secondary-500 " +
+    "shadow-lg shadow-ocean/20",
   ghost:
-    "bg-transparent text-white/80 hover:bg-white/10 hover:text-white active:bg-white/20",
+    "bg-transparent text-cream/80 hover:bg-cream/10 hover:text-cream active:bg-cream/15",
   danger:
-    "bg-error text-white font-semibold hover:bg-red-600 active:bg-red-700 " +
-    "shadow-lg shadow-red-500/20",
+    "bg-error text-cream font-semibold hover:bg-red-700 active:bg-red-800 " +
+    "shadow-lg shadow-red-900/30",
   outline:
-    "bg-transparent border border-white/30 text-white hover:bg-white/10 " +
-    "hover:border-white/60 active:bg-white/20",
+    "bg-transparent border border-cream/30 text-cream " +
+    "hover:bg-cream/8 hover:border-cream/60 active:bg-cream/15",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
@@ -63,7 +65,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           clsx(
             "inline-flex items-center justify-center",
             "font-medium transition-all duration-200",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-avocado/50",
             "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
             variantStyles[variant],
             sizeStyles[size],
@@ -83,11 +85,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             >
               <circle
                 className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
+                cx="12" cy="12" r="10"
+                stroke="currentColor" strokeWidth="4"
               />
               <path
                 className="opacity-75"

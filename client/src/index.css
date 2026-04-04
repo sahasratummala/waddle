@@ -5,18 +5,17 @@
 /* ─── CSS Custom Properties ─────────────────────────────────────────────────── */
 :root {
   --radius: 0.75rem;
-  --primary: #F5C842;
-  --secondary: #4A90D9;
-  --accent: #5CB85C;
-  --bg-dark: #1A1A2E;
-  --bg-card: #0F3460;
-  --bg-surface: #1E1E3A;
+  --cream:   #E5DECA;
+  --ocean:   #7E9DA2;
+  --avocado: #898433;
+  --olive:   #45441A;
+  --forest:  #282C15;
 }
 
 /* ─── Base Styles ────────────────────────────────────────────────────────────── */
 @layer base {
   * {
-    @apply border-white/10;
+    border-color: rgb(229 222 202 / 0.12);
     box-sizing: border-box;
   }
 
@@ -25,63 +24,90 @@
   }
 
   body {
-    @apply bg-background text-white antialiased;
+    background-color: #282C15;
+    color: #E5DECA;
+    @apply antialiased;
     font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Nunito', system-ui, sans-serif;
+    color: #E5DECA;
     @apply font-bold;
   }
 
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  p, span, label, li, td, th {
+    color: #E5DECA;
   }
 
-  ::-webkit-scrollbar-track {
-    @apply bg-background-surface rounded-full;
+  a {
+    color: #7E9DA2;
   }
 
-  ::-webkit-scrollbar-thumb {
-    @apply bg-white/20 rounded-full;
+  a:hover {
+    color: #E5DECA;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-white/40;
-  }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #282C15; border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb { background: rgb(229 222 202 / 0.2); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(229 222 202 / 0.4); }
 
   /* Focus ring */
   :focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+    outline: none;
+    box-shadow: 0 0 0 2px #898433, 0 0 0 4px #282C15;
   }
 
   /* Selection */
   ::selection {
-    @apply bg-primary/30 text-white;
+    background: rgb(137 132 51 / 0.35);
+    color: #E5DECA;
   }
 }
 
 /* ─── Component Utilities ────────────────────────────────────────────────────── */
 @layer components {
+  /* Glass card — olive tint with cream border */
   .card-glass {
-    @apply bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl;
+    background: rgb(69 68 26 / 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgb(229 222 202 / 0.12);
+    border-radius: 0.75rem;
   }
 
+  /* Standard input */
   .input-base {
-    @apply w-full px-4 py-3 bg-background-surface border border-white/20 rounded-lg
-           text-white placeholder-white/40 focus:outline-none focus:ring-2
-           focus:ring-primary/50 focus:border-primary/50 transition-all duration-200;
+    @apply w-full px-4 py-3 rounded-lg transition-all duration-200;
+    background: #343618;
+    border: 1px solid rgb(229 222 202 / 0.2);
+    color: #E5DECA;
+  }
+  .input-base::placeholder { color: rgb(229 222 202 / 0.35); }
+  .input-base:focus {
+    outline: none;
+    border-color: #898433;
+    box-shadow: 0 0 0 2px rgb(137 132 51 / 0.25);
   }
 
+  /* Gradient text using avocado → ocean */
   .gradient-text {
-    @apply bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
+    background: linear-gradient(135deg, #898433, #7E9DA2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
+  /* Background for pond/nature sections */
   .pond-bg {
-    background: radial-gradient(ellipse at center, #16213E 0%, #1A1A2E 70%);
+    background: radial-gradient(ellipse at center, #45441A 0%, #282C15 70%);
+  }
+
+  /* Divider */
+  .divider {
+    border-color: rgb(229 222 202 / 0.12);
   }
 }
 
@@ -92,13 +118,7 @@
   }
 
   @keyframes fadeSlideIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 }
