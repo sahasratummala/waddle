@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Loader2, Timer, Sparkles, Trophy } from "lucide-react";
 import type { Socket } from "socket.io-client";
 import DrawingBoard, { DrawingBoardRef } from "./DrawingBoard";
@@ -38,6 +38,7 @@ export default function PictionaryGame({
   const pollDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isChecking = useRef(false);
   const gameOver = useRef(false);
+  const checkDrawingRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const isSolo = !socket || !roomCode;
 
@@ -91,11 +92,11 @@ export default function PictionaryGame({
   }, [socket, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Gemini check ─────────────────────────────────────────────────────────────
-  const checkDrawing = useCallback(async () => {
+  // Use a ref so the setInterval always calls the freshest version (no stale closure)
+  checkDrawingRef.current = async () => {
     if (isChecking.current || gameOver.current || !word) return;
     const imageData = drawingRef.current?.getImageData();
-    // Skip if canvas is nearly blank (tiny base64 = nothing drawn)
-    if (!imageData || imageData.length < 300) return;
+    if (!imageData) return;
 
     isChecking.current = true;
     try {
@@ -115,7 +116,18 @@ export default function PictionaryGame({
       });
       const data = await res.json();
       if (data.attempt) setGeminiGuess(data.attempt);
-      if (data.guessed && !gameOver.current) {
+
+      // Client-side match as a guaranteed backup in case server returns guessed:false
+      // even when the attempt clearly matches the word
+      function clientNorm(s: string) { return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim(); }
+      const wn = clientNorm(word);
+      const an = clientNorm(data.attempt || "");
+      const wParts = wn.split(/\s+/).filter((p) => p.length > 2);
+      const aParts = an.split(/\s+/).filter((p) => p.length > 2);
+      const clientMatch = an === wn || an.includes(wn) || wn.includes(an) ||
+        wParts.some((p) => an.includes(p)) || aParts.some((p) => wn.includes(p));
+
+      if ((data.guessed || clientMatch) && !gameOver.current) {
         setWinner({ userId, username });
         endGame("won");
       }
@@ -124,7 +136,7 @@ export default function PictionaryGame({
     } finally {
       isChecking.current = false;
     }
-  }, [word, session, roomCode, isSolo, username, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
   // ── Start timer + polling once drawing begins ────────────────────────────────
   useEffect(() => {
@@ -139,7 +151,7 @@ export default function PictionaryGame({
 
     pollDelayRef.current = setTimeout(() => {
       if (!gameOver.current) {
-        pollRef.current = setInterval(checkDrawing, CHECK_INTERVAL_MS);
+        pollRef.current = setInterval(() => checkDrawingRef.current(), CHECK_INTERVAL_MS);
       }
     }, CHECK_START_DELAY_MS);
 

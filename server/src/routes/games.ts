@@ -70,8 +70,27 @@ Respond with ONLY this JSON (no markdown, no extra text):
         return;
       }
 
-      const guessed = Boolean(parsed.guessed);
       const attempt = String(parsed.attempt || "…").slice(0, 60);
+
+      // Flexible matching: award points if Gemini says guessed, OR if the
+      // attempt clearly contains the target word (handles "bird's nest" → "nest",
+      // "a pencil" → "pencil", etc.).
+      function normalize(s: string): string {
+        return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+      }
+      const wordNorm    = normalize(word);
+      const attemptNorm = normalize(attempt);
+      // Split into significant words (length > 2) for partial matching
+      const wordParts    = wordNorm.split(/\s+/).filter((w) => w.length > 2);
+      const attemptParts = attemptNorm.split(/\s+/).filter((w) => w.length > 2);
+      const wordMatch =
+        attemptNorm === wordNorm ||                                   // exact
+        attemptNorm.includes(wordNorm) ||                            // attempt contains word
+        wordNorm.includes(attemptNorm) ||                            // word contains attempt
+        wordParts.some((w) => attemptNorm.includes(w)) ||           // any word-part in attempt
+        attemptParts.some((w) => wordNorm.includes(w));             // any attempt-part in word
+
+      const guessed = Boolean(parsed.guessed) || wordMatch;
 
       if (guessed) {
         await awardPoints(userId, 25, `Pictionary: Gemini guessed "${word}"`);
