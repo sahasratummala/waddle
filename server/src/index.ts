@@ -14,8 +14,16 @@ const PORT = parseInt(process.env.PORT || "3001", 10);
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
+// In development allow any origin so teammates on other devices on the same
+// network can connect. In production lock it down to CLIENT_URL only.
+const isDev = process.env.NODE_ENV !== "production";
+
+const corsOrigin: cors.CorsOptions["origin"] = isDev
+  ? (_origin, callback) => callback(null, true)
+  : [CLIENT_URL, "http://localhost:5173", "http://localhost:4173"];
+
 const corsOptions: cors.CorsOptions = {
-  origin: [CLIENT_URL, "http://localhost:5173", "http://localhost:4173"],
+  origin: corsOrigin,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -65,7 +73,9 @@ app.use(
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 const io = new Server(httpServer, {
   cors: {
-    origin: [CLIENT_URL, "http://localhost:5173", "http://localhost:4173"],
+    origin: isDev
+      ? (_origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => callback(null, true)
+      : [CLIENT_URL, "http://localhost:5173", "http://localhost:4173"],
     methods: ["GET", "POST"],
     credentials: true,
   },

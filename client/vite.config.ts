@@ -11,6 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true, // Bind to 0.0.0.0 so other devices on the network can connect
     proxy: {
       "/api": {
         target: "http://localhost:3001",

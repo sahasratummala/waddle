@@ -78,16 +78,21 @@ export const useFlockStore = create<FlockState>((set, get) => ({
       const { data } = await res.json();
       set({ room: data.room, loading: false });
 
-      // Connect socket and join the room
-      const socket = connectSocket(token);
-      socket.emit("join-room", {
-        roomCode: data.room.code,
-        userId: session.data.session!.user.id,
-      });
-
+      // Register listeners before connecting so no events are missed
       get().setupSocketListeners();
 
-      return data.room.code as string;
+      const socket = connectSocket(token);
+      const uid = session.data.session!.user.id;
+      const roomCode = data.room.code as string;
+
+      const emitJoin = () => socket.emit("join-room", { roomCode, userId: uid });
+      if (socket.connected) {
+        emitJoin();
+      } else {
+        socket.once("connect", emitJoin);
+      }
+
+      return roomCode;
     } catch (err: any) {
       set({ loading: false, error: err.message });
       throw err;
@@ -119,13 +124,19 @@ export const useFlockStore = create<FlockState>((set, get) => ({
       const { data } = await res.json();
       set({ room: data.room, loading: false });
 
-      const socket = connectSocket(token);
-      socket.emit("join-room", {
-        roomCode,
-        userId: session.data.session!.user.id,
-      });
-
+      // Register listeners before connecting so no events are missed
       get().setupSocketListeners();
+
+      const socket = connectSocket(token);
+      const uid = session.data.session!.user.id;
+
+      // Emit join-room once the socket is confirmed connected
+      const emitJoin = () => socket.emit("join-room", { roomCode, userId: uid });
+      if (socket.connected) {
+        emitJoin();
+      } else {
+        socket.once("connect", emitJoin);
+      }
     } catch (err: any) {
       set({ loading: false, error: err.message });
       throw err;
@@ -180,6 +191,31 @@ export const useFlockStore = create<FlockState>((set, get) => ({
 
   setupSocketListeners: () => {
     const socket = getSocket();
+
+    // Remove any previously registered listeners to prevent duplicates
+    // when joinRoom/createRoom is called more than once (e.g. React StrictMode,
+    // page navigation, or reconnect).
+    socket.off("sync-state");
+    socket.off("participant-joined");
+    socket.off("participant-left");
+    socket.off("timer-tick");
+    socket.off("break-start");
+    socket.off("game-start");
+    socket.off("game-end");
+    socket.off("study-complete");
+    socket.off("participant-points");
+    socket.off("new-message");
+    socket.off("room-config-updated");
+    socket.off("reconnect");
+
+    // On reconnect (e.g. phone screen-locks, network blip) re-join the room
+    // so the server puts the socket back into the correct room group.
+    socket.on("reconnect", () => {
+      const { room } = get();
+      if (room) {
+        socket.emit("join-room", { roomCode: room.code });
+      }
+    });
 
     socket.on("sync-state", ({ room, timerState }) => {
       set({ room, timerState, isConnected: true });
