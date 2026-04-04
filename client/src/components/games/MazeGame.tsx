@@ -20,7 +20,9 @@ const COLS = 11;
 const ROWS = 11;
 const CELL_SIZE = 36;
 
-function seededMaze(seed: number) {
+type MazeSeed = number;
+
+function seededMaze(seed: MazeSeed) {
   let s = seed;
   const rand = () => {
     s = (s * 1664525 + 1013904223) & 0xffffffff;
@@ -80,8 +82,6 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
   const posRef = useRef({ row: 0, col: 0 });
   const displayRef = useRef({ x: CELL_SIZE / 2 + 1, y: CELL_SIZE / 2 + 1 });
   const animRef = useRef<number | null>(null);
-  // This ref lets us lock input immediately without waiting for React state update
-  const wonRef = useRef(false);
 
   const centerOf = (row: number, col: number) => ({
     x: col * CELL_SIZE + CELL_SIZE / 2 + 1,
@@ -98,11 +98,8 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       setMaze(seededMaze(incomingSeed));
     });
 
-    // This fires for ALL players when anyone finishes — locks everyone out
     socket.on("maze:winner", (data: { userId: string; username: string }) => {
-      wonRef.current = true;
       setWinner({ id: data.userId, name: data.username });
-      setDrawing(false);
       onGameEnd(data.userId, data.username);
     });
 
@@ -119,9 +116,11 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
     const canvas = canvasRef.current;
     if (!canvas || !maze) return;
     const ctx = canvas.getContext("2d")!;
-    canvas.width = COLS * CELL_SIZE + 2;
-    canvas.height = ROWS * CELL_SIZE + 2;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const W = COLS * CELL_SIZE + 2;
+    const H = ROWS * CELL_SIZE + 2;
+    canvas.width = W;
+    canvas.height = H;
+    ctx.clearRect(0, 0, W, H);
 
     // Finish square
     ctx.fillStyle = "#9FE1CB";
@@ -163,7 +162,7 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       ctx.stroke();
     }
 
-    // Player token
+    // Player
     const { x: px, y: py } = displayRef.current;
     ctx.fillStyle = "rgba(99,153,34,0.15)";
     ctx.beginPath();
@@ -220,7 +219,7 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (wonRef.current || !maze) return;
+    if (winner || !maze) return;
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
     const y = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
@@ -233,7 +232,7 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!drawing || wonRef.current || !maze) return;
+    if (!drawing || !maze) return;
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
     const y = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
@@ -250,16 +249,12 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       animateTo(c.x, c.y, newPath);
 
       if (cell.row === ROWS - 1 && cell.col === COLS - 1) {
-        wonRef.current = true;
-        setDrawing(false);
         if (roomCode !== "SOLO_GAME") {
-          // Tell the server — server awards points and broadcasts maze:winner to all players
           socket.emit("maze:solved", { roomCode, userId, username });
-        } else {
-          // Solo mode — just end locally
-          setWinner({ id: userId, name: username });
-          onGameEnd(userId, username);
         }
+        setWinner({ id: userId, name: username });
+        onGameEnd(userId, username);
+        setDrawing(false);
       }
     }
   };
@@ -289,15 +284,15 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       </div>
 
       {winner && (
-        <div className="bg-green-50 border-2 border-green-300 rounded-2xl px-6 py-3 text-green-800 font-semibold text-lg text-center">
-          {winner.id === userId ? "🌸 You solved it first! 🌸" : `🏆 ${winner.name} solved the maze first!`}
+        <div className="bg-green-50 border-2 border-green-300 rounded-2xl px-6 py-3 text-green-800 font-semibold text-lg">
+          🌸 {winner.name} made it! 🌸
         </div>
       )}
 
       <canvas
         ref={canvasRef}
         className="rounded-2xl touch-none"
-        style={{ border: "2.5px solid #97C459", maxWidth: "100%", imageRendering: "crisp-edges", cursor: wonRef.current ? "default" : "crosshair" }}
+        style={{ border: "2.5px solid #97C459", maxWidth: "100%", imageRendering: "crisp-edges", cursor: "crosshair" }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
