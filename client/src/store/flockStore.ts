@@ -26,6 +26,7 @@ interface FlockState {
   leaveRoom: () => void;
   startStudy: (studyConfig: StudyConfig) => void;
   sendMessage: (content: string) => void;
+  launchGame: (gameType: GameType) => void; // <--- ADDED THIS LINE
   setRoom: (room: FlockParty) => void;
   setTimerState: (timerState: TimerState) => void;
   addMessage: (message: Message) => void;
@@ -158,6 +159,13 @@ export const useFlockStore = create<FlockState>((set, get) => ({
     if (!room) return;
     const socket = getSocket();
     socket.emit("send-message", { roomCode: room.code, content });
+  },
+
+  launchGame: (gameType: GameType) => { // <--- ADDED THIS FUNCTION
+    const { room } = get();
+    if (!room) return;
+    const socket = getSocket();
+    socket.emit("start-game", { roomCode: room.code, gameType });
   },
 
   setRoom: (room: FlockParty) => set({ room }),

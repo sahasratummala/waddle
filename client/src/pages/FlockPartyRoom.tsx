@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react"; // Added React import to clear JSX errors
 import { useParams, useNavigate } from "react-router-dom";
 import { Copy, Check, LogOut, Play } from "lucide-react";
 import { useFlockStore } from "@/store/flockStore";
@@ -14,6 +14,12 @@ import ParticipantList from "@/components/flock/ParticipantList";
 import ChatPanel from "@/components/flock/ChatPanel";
 import GameHub from "@/components/flock/GameHub";
 import CompletionScreen from "@/components/flock/CompletionScreen";
+
+// --- FIXED GAME IMPORTS ---
+// Stepping out of 'pages' to 'src' then into 'components/games'
+import MazeGame from "../components/games/MazeGame";
+import BreadcrumbGame from "../components/games/BreadcrumbGame";
+import PictionaryGame from "../components/games/PictionaryGame";
 
 interface CompletionData {
   totalSessions: number;
@@ -32,32 +38,37 @@ export default function FlockPartyRoom() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   
-  // Notice we pull joinRoom out of the store now
-  const { room, timerState, messages, joinRoom, leaveRoom, startStudy, sendMessage } = useFlockStore();
+  const { 
+    room, timerState, messages, joinRoom, 
+    leaveRoom, startStudy, sendMessage,
+    currentGame, launchGame 
+  } = useFlockStore();
 
   const [codeCopied, setCodeCopied] = useState(false);
   const [completionData, setCompletionData] = useState<CompletionData | null>(null);
 
-  // Auto-join logic if someone pastes a room code link directly into a new tab
   useEffect(() => {
     if (!room && roomCode) {
-      joinRoom(roomCode).catch(() => {
-        // If joining fails (bad code or not logged in), kick them back to safety
-        navigate("/flock-party");
-      });
+      joinRoom(roomCode).catch(() => navigate("/flock-party"));
     }
   }, [room, roomCode, joinRoom, navigate]);
 
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+  const socket = getSocket();
+  if (!socket) return;
 
-    const handler = (data: CompletionData) => {
-      setCompletionData(data);
-    };
-    socket.on("study-complete", handler);
-    return () => { socket.off("study-complete", handler); };
-  }, []);
+  // This is the missing link! 
+  // It catches the server's broadcast and updates the store for everyone.
+  socket.on("game:started", ({ game }) => {
+    console.log("Game starting for everyone:", game);
+    useFlockStore.setState({ currentGame: game as any });
+  });
+
+  // Clean up the listener when the component unmounts
+  return () => {
+    socket.off("game:started");
+  };
+}, []);
 
   function handleCopyCode() {
     if (roomCode) {
@@ -83,16 +94,50 @@ export default function FlockPartyRoom() {
     }
   }
 
-  if (!room) {
-    return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="text-center">
-          <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin mx-auto mb-4" />
-          <p className="text-white/60">Joining the flock...</p>
-        </div>
-      </div>
-    );
-  }
+  const renderBreakContent = () => {
+    const socket = getSocket();
+
+    // 1. If no game is active, show the Hub
+    if (!currentGame) {
+      return (
+        <GameHub
+          isHost={isHost}
+          onLaunchGame={(gameId) => {
+            if (socket && roomCode) {
+              // Direct emit to bypass any store logic issues
+              socket.emit("game:start", { roomCode, game: gameId });
+              // Manually set local state so the host's screen switches immediately
+              useFlockStore.setState({ currentGame: gameId as any });
+            }
+          }}
+        />
+      );
+    }
+
+    // 2. If a game IS active, we MUST pass these props or it won't load
+    if (!socket || !user || !roomCode) return <div>Loading Socket...</div>;
+
+    const gameProps = {
+      socket,
+      roomCode,
+      userId: user.id,
+      username: user.username || "Goose",
+    };
+
+    if (currentGame === "MAZE") {
+      return <MazeGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
+    }
+    if (currentGame === "BREADCRUMB") {
+      return <BreadcrumbGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
+    }
+    if (currentGame === "PICTIONARY") {
+      return <PictionaryGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
+    }
+
+    return null;
+  };
+
+  if (!room) return null;
 
   const isHost = room.hostId === user?.id;
   const isStudying = room.status === RoomStatus.STUDYING;
@@ -101,187 +146,84 @@ export default function FlockPartyRoom() {
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl animate-in">
-      {/* Header */}
+      {/* Header Section */}
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl font-display font-extrabold text-white">Flock Room</h1>
-            <button
-              onClick={handleCopyCode}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-background-surface border border-white/15 hover:border-white/30 transition-colors text-sm font-mono text-white"
-            >
-              {codeCopied ? (
-                <><Check className="w-3.5 h-3.5 text-accent" />{roomCode}</>
-              ) : (
-                <><Copy className="w-3.5 h-3.5 text-white/40" />{roomCode}</>
-              )}
+            <button onClick={handleCopyCode} className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-background-surface border border-white/15 text-sm font-mono text-white">
+              {codeCopied ? <Check className="w-3.5 h-3.5 text-accent" /> : <Copy className="w-3.5 h-3.5 text-white/40" />}
+              {roomCode}
             </button>
           </div>
-          <p className="text-white/50 text-sm flex items-center gap-2">
-            <span
-              className={`inline-block w-2 h-2 rounded-full ${
-                isStudying
-                  ? "bg-accent"
-                  : isOnBreak
-                  ? "bg-primary"
-                  : isEnded
-                  ? "bg-white/20"
-                  : "bg-white/30"
-              }`}
-            />
-            {isStudying
-              ? "Studying"
-              : isOnBreak
-              ? "On break"
-              : isEnded
-              ? "Session ended"
-              : "In lobby"}
-            {" · "}
-            {STYLE_LABELS[room.studyStyle]}
-            {room.studyConfig.totalCycles && (
-              <span className="text-white/30">
-                {" · "}{room.studyConfig.totalCycles} rounds
-              </span>
-            )}
+          <p className="text-white/50 text-sm">
+            {isStudying ? "Studying" : isOnBreak ? "On break" : "In lobby"} · {STYLE_LABELS[room.studyStyle]}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLeave}
-          leftIcon={<LogOut className="w-4 h-4" />}
-          className="text-white/50 hover:text-white"
-        >
+        <Button variant="ghost" size="sm" onClick={handleLeave} leftIcon={<LogOut className="w-4 h-4" />}>
           Leave
         </Button>
       </div>
 
-      {/* Completion screen — shown when session is done */}
-      {isEnded && completionData && (
-        <CompletionScreen
-          completionData={completionData}
-          participants={room.participants}
-          onLeave={handleLeave}
-        />
-      )}
-
-      {/* Main layout (hidden after completion) */}
       {!isEnded && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Participants */}
+          {/* Left: Participants List */}
           <div className="lg:col-span-1">
-            <ParticipantList
-              participants={room.participants}
-              currentUserId={user?.id}
-              isHost={isHost}
-              roomStatus={room.status}
-              onStartStudy={handleStartStudy}
+            <ParticipantList 
+              participants={room.participants} 
+              currentUserId={user?.id} 
+              isHost={isHost} 
+              roomStatus={room.status} 
+              onStartStudy={handleStartStudy} 
             />
           </div>
 
-          {/* Right: Timer + Game Hub + Chat */}
+          {/* Right: Timer / Game Hub / Chat */}
           <div className="lg:col-span-2 flex flex-col gap-4">
-            {/* Lobby state */}
+            {/* Lobby UI */}
             {room.status === RoomStatus.LOBBY && (
-              <div className="bg-background-card border border-white/10 rounded-2xl p-6">
-                <div className="text-center py-4">
-                  <div className="flex justify-center gap-3 mb-4">
-                    {room.participants.slice(0, 3).map((p) => (
-                      <GooseAvatar key={p.userId} stage={p.gooseStage} size="sm" animated />
-                    ))}
-                  </div>
-                  <h2 className="text-xl font-display font-bold text-white mb-2">
-                    {isHost ? "Ready to start?" : "Waiting for host to start..."}
-                  </h2>
-                  <p className="text-white/50 text-sm mb-1">
-                    {room.participants.length} goose{room.participants.length !== 1 ? "s" : ""} in the flock
-                  </p>
-                  <p className="text-white/35 text-xs mb-5">
-                    Share the code{" "}
-                    <span className="font-mono text-white/60">{roomCode}</span>{" "}
-                    to invite friends
-                  </p>
-                  {isHost && (
-                    <Button
-                      variant="primary"
-                      onClick={handleStartStudy}
-                      leftIcon={<Play className="w-4 h-4" />}
-                    >
-                      Start Study Session
-                    </Button>
-                  )}
-                </div>
+              <div className="bg-background-card border border-white/10 rounded-2xl p-6 text-center">
+                <h2 className="text-xl font-display font-bold text-white mb-4">
+                  {isHost ? "Ready to start?" : "Waiting for host..."}
+                </h2>
+                {isHost && (
+                  <Button onClick={handleStartStudy} leftIcon={<Play className="w-4 h-4" />}>
+                    Start Study Session
+                  </Button>
+                )}
               </div>
             )}
 
-            {/* Study timer — shown while studying or on break */}
-            {(isStudying || isOnBreak) && (
-              <StudyTimer
-                timerState={timerState}
-                studyConfig={room.studyConfig}
-                roomStatus={room.status}
-                isHost={isHost}
-                onEndEarly={handleEndEarly}
+            {/* Timer: Visible during study, or break if no game is running */}
+            {(isStudying || (isOnBreak && !currentGame)) && (
+              <StudyTimer 
+                timerState={timerState} 
+                studyConfig={room.studyConfig} 
+                roomStatus={room.status} 
+                isHost={isHost} 
+                onEndEarly={handleEndEarly} 
               />
             )}
 
-            {/* Game Hub — only shown during breaks */}
-            {isOnBreak && (
-              <GameHub
-                isHost={isHost}
-                onLaunchGame={() => {
-                  // Christina wires this up in gameHandlers.ts
-                }}
-              />
-            )}
+            {/* Games or Hub: Visible during breaks */}
+            {isOnBreak && renderBreakContent()}
 
-            {/* Session config strip */}
-            {!isOnBreak && !isEnded && (
-              <div className="bg-background-card border border-white/10 rounded-2xl p-4">
-                <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3">
-                  Session Config
-                </h3>
-                <div className="grid grid-cols-4 gap-3 text-center">
-                  <div>
-                    <p className="text-lg font-display font-bold text-white">
-                      {room.studyConfig.studyDurationMinutes >= 60
-                        ? `${room.studyConfig.studyDurationMinutes / 60}h`
-                        : `${room.studyConfig.studyDurationMinutes}m`}
-                    </p>
-                    <p className="text-xs text-white/40">Study</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-display font-bold text-white">
-                      {room.studyConfig.breakDurationMinutes >= 60
-                        ? `${room.studyConfig.breakDurationMinutes / 60}h`
-                        : `${room.studyConfig.breakDurationMinutes}m`}
-                    </p>
-                    <p className="text-xs text-white/40">Break</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-display font-bold text-white">
-                      {room.studyConfig.totalCycles ?? "∞"}
-                    </p>
-                    <p className="text-xs text-white/40">Rounds</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-display font-bold text-primary">
-                      {STYLE_LABELS[room.studyStyle]}
-                    </p>
-                    <p className="text-xs text-white/40">Style</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Chat */}
-            <ChatPanel
-              messages={messages}
-              currentUserId={user?.id}
-              onSendMessage={sendMessage}
+            <ChatPanel 
+              messages={messages} 
+              currentUserId={user?.id} 
+              onSendMessage={sendMessage} 
             />
           </div>
         </div>
+      )}
+      
+      {/* Completion UI */}
+      {isEnded && completionData && (
+        <CompletionScreen 
+          completionData={completionData} 
+          participants={room.participants} 
+          onLeave={handleLeave} 
+        />
       )}
     </div>
   );
