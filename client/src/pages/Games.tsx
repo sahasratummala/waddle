@@ -11,19 +11,16 @@ const GAMES = [
         type: GameType.MAZE,
         label: "Goose Maze",
         description: "Navigate your goose through the maze as fast as you can.",
-        emoji: "🌀",
     },
     {
         type: GameType.BREADCRUMB,
         label: "Breadcrumb Tap",
         description: "Tap the breadcrumbs faster than everyone else.",
-        emoji: "🍞",
     },
     {
         type: GameType.PICTIONARY,
         label: "Pictionary",
         description: "Draw goose-themed objects and let AI guess what you drew.",
-        emoji: "🎨",
     },
 ];
 
@@ -64,18 +61,17 @@ export default function Games() {
                 </div>
 
                 {!activeGame && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex flex-col gap-4">
                         {GAMES.map((game) => (
                             <button
                                 key={game.type}
                                 onClick={() => handleSelectGame(game.type)}
-                                className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-forest/10 bg-white hover:border-olive/30 hover:bg-olive/5 transition-all text-center group"
+                                className="flex flex-col items-start gap-2 p-8 rounded-2xl border-2 border-forest/10 bg-white hover:border-olive/30 hover:bg-olive/5 transition-all text-left group w-full"
                             >
-                                <span className="text-4xl">{game.emoji}</span>
-                                <h2 className="font-display font-black text-forest text-sm group-hover:text-olive transition-colors">
+                                <h2 className="font-display font-black text-forest text-xl group-hover:text-olive transition-colors">
                                     {game.label}
                                 </h2>
-                                <p className="text-xs text-forest/50 font-medium">{game.description}</p>
+                                <p className="text-sm text-forest/60 font-medium">{game.description}</p>
                             </button>
                         ))}
                     </div>
