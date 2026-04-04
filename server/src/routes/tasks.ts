@@ -43,11 +43,13 @@ router.post("/generate", requireAuth, async (req: AuthenticatedRequest, res: Res
     // throughout the day rather than all bunched at the end.
     type InsertableTask = {
       title: string; description: string; estimatedMinutes: number;
-      points: number; category: string; is_self_care: boolean;
+      points: number; category: string; is_self_care: boolean; urgent: boolean;
     };
-    const mainTasks: InsertableTask[] = result.tasks.map((t) => ({ ...t, is_self_care: false }));
-    const selfCareTasks: InsertableTask[] = result.selfCare.map((t) => ({ ...t, is_self_care: true }));
-    const allTasks: InsertableTask[] = interleave(mainTasks, selfCareTasks);
+    // Urgent tasks go first, then interleave self-care among the rest
+    const urgentTasks: InsertableTask[]    = result.tasks.filter((t) => t.urgent).map((t) => ({ ...t, is_self_care: false }));
+    const nonUrgentTasks: InsertableTask[] = result.tasks.filter((t) => !t.urgent).map((t) => ({ ...t, is_self_care: false }));
+    const selfCareTasks: InsertableTask[]  = result.selfCare.map((t) => ({ ...t, is_self_care: true }));
+    const allTasks: InsertableTask[] = [...urgentTasks, ...interleave(nonUrgentTasks, selfCareTasks)];
 
     const tasksToInsert = allTasks.map((task) => ({
       user_id: userId,
@@ -58,6 +60,7 @@ router.post("/generate", requireAuth, async (req: AuthenticatedRequest, res: Res
       points: task.points,
       category: task.category,
       is_self_care: task.is_self_care,
+      urgent: task.urgent,
       completed: false,
     }));
 
@@ -221,6 +224,61 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respons
   }
 });
 
+// POST /api/tasks/add-more
+// Appends more tasks to today's existing list without wiping what's there.
+router.post("/add-more", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { description, date } = req.body as { description?: string; date?: string };
+  const userId = req.userId!;
+
+  if (!description || typeof description !== "string" || description.trim().length < 3) {
+    res.status(400).json({ success: false, error: "Please describe what else you need to do." });
+    return;
+  }
+
+  const taskDate = date || new Date().toISOString().split("T")[0];
+
+  try {
+    const result = await generateTasks(description.trim());
+
+    type InsertableTask = {
+      title: string; description: string; estimatedMinutes: number;
+      points: number; category: string; is_self_care: boolean; urgent: boolean;
+    };
+    const urgentTasks: InsertableTask[]    = result.tasks.filter((t) => t.urgent).map((t) => ({ ...t, is_self_care: false }));
+    const nonUrgentTasks: InsertableTask[] = result.tasks.filter((t) => !t.urgent).map((t) => ({ ...t, is_self_care: false }));
+    // No self-care on add-more — user already has some from the initial generation
+    const allNewTasks: InsertableTask[] = [...urgentTasks, ...nonUrgentTasks];
+
+    const tasksToInsert = allNewTasks.map((task) => ({
+      user_id: userId,
+      date: taskDate,
+      title: task.title,
+      description: task.description,
+      estimated_minutes: task.estimatedMinutes,
+      points: task.points,
+      category: task.category,
+      is_self_care: task.is_self_care,
+      urgent: task.urgent,
+      completed: false,
+    }));
+
+    const { data: savedTasks, error: insertError } = await supabaseAdmin
+      .from("daily_tasks")
+      .insert(tasksToInsert)
+      .select();
+
+    if (insertError) {
+      res.status(500).json({ success: false, error: "Failed to save new tasks." });
+      return;
+    }
+
+    res.json({ success: true, data: { savedTasks } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to generate tasks.";
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
 // GET /api/tasks?date=YYYY-MM-DD
 router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.userId!;
@@ -231,6 +289,7 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =>
     .select("*")
     .eq("user_id", userId)
     .eq("date", date)
+    .order("urgent", { ascending: false })
     .order("created_at", { ascending: true });
 
   if (error) {

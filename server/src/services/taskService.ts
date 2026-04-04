@@ -16,16 +16,20 @@ function normalizeCategory(raw: string): TaskCategory {
 
 export async function generateTasks(description: string): Promise<TaskGenerationResult> {
   const prompt = `You are a friendly productivity coach for a study app called Waddle.
-A user has described their day. Generate a structured, achievable task list for them.
+A user has described what they want to get done today. Turn their description into a realistic task list.
 
-Rules:
-- Generate 3–6 main tasks based on the user's description
-- Generate 1–2 self-care tasks (e.g., go for a walk, drink water, eat a proper meal, call a friend)
-- Keep tasks specific and actionable
-- estimatedMinutes: realistic time estimate (5–180 minutes)
-- points: reward based on effort (10–100 for main tasks, 5–30 for self-care)
-- category must be one of: ACADEMIC, WORK, PERSONAL, SELF_CARE, CREATIVE, FITNESS, OTHER
-- Return ONLY valid JSON — no markdown fences, no extra text
+CRITICAL RULES — read carefully:
+1. Map each thing the user mentions to EXACTLY ONE task. Do NOT break a single item into sub-steps.
+   BAD: user says "chem homework" → you output [Read instructions, Gather materials, Complete problems, Review answers]
+   GOOD: user says "chem homework" → you output [Complete chemistry homework]
+2. Only create as many tasks as the user has distinct things to do. If they mention 2 things, return 2 tasks.
+3. Tasks must be high-level and outcome-focused, not procedural micro-steps.
+4. Add 1–2 self-care tasks that fit naturally into their day (a walk, a meal, water, rest).
+5. estimatedMinutes: realistic total time for the whole task (e.g. "chem homework" = 60–90 min).
+6. points: based on effort — light 10–25, medium 30–60, heavy 65–100. Self-care 5–20.
+7. category must be one of: ACADEMIC, WORK, PERSONAL, SELF_CARE, CREATIVE, FITNESS, OTHER
+8. urgent: set to true if the user signals urgency for that specific item — look for words like "ASAP", "urgent", "due today", "due tonight", "deadline", "need to do first", "priority", "must finish", "last minute". Self-care tasks are never urgent.
+9. Return ONLY valid JSON — no markdown, no extra text.
 
 User's day: "${description}"
 
@@ -33,11 +37,12 @@ Return this exact JSON shape:
 {
   "tasks": [
     {
-      "title": "string",
-      "description": "string (1–2 sentences on how to do it)",
+      "title": "string (concise, outcome-focused, e.g. 'Complete chemistry homework')",
+      "description": "string (one sentence on what done looks like, not how to do each step)",
       "estimatedMinutes": number,
       "points": number,
-      "category": "ACADEMIC|WORK|PERSONAL|CREATIVE|FITNESS|OTHER"
+      "category": "ACADEMIC|WORK|PERSONAL|CREATIVE|FITNESS|OTHER",
+      "urgent": true or false
     }
   ],
   "selfCare": [
@@ -46,7 +51,8 @@ Return this exact JSON shape:
       "description": "string",
       "estimatedMinutes": number,
       "points": number,
-      "category": "SELF_CARE"
+      "category": "SELF_CARE",
+      "urgent": false
     }
   ]
 }`;
@@ -79,6 +85,7 @@ Return this exact JSON shape:
       estimatedMinutes: Math.max(5, Math.min(180, Number(task.estimatedMinutes) || 30)),
       points: clampPoints(Number(task.points) || 20, false),
       category: normalizeCategory(task.category),
+      urgent: Boolean(task.urgent),
     })),
     selfCare: parsed.selfCare.map((task) => ({
       title: String(task.title || "Self Care").slice(0, 200),
@@ -86,6 +93,7 @@ Return this exact JSON shape:
       estimatedMinutes: Math.max(5, Math.min(60, Number(task.estimatedMinutes) || 15)),
       points: clampPoints(Number(task.points) || 10, true),
       category: TaskCategory.SELF_CARE,
+      urgent: false as const,
     })),
   };
 }

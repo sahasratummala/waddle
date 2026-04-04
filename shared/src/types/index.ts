@@ -114,6 +114,7 @@ export interface DailyTask {
   points: number;
   category: TaskCategory;
   isSelfCare: boolean;
+  urgent: boolean;
   completed: boolean;
   photoUrl?: string;
   createdAt: string;
@@ -130,6 +131,7 @@ export interface GeneratedTask {
   estimatedMinutes: number;
   points: number;
   category: TaskCategory;
+  urgent: boolean;
 }
 
 export interface TaskGenerationResult {
