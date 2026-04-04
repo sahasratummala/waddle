@@ -59,11 +59,8 @@ export default function Shop() {
   const nextStage = NEXT_STAGE[stage];
   const canEvolve = nextStage && goose ? goose.evolutionPoints >= GOOSE_EVOLUTION_THRESHOLDS[nextStage] : false;
 
-  // MAGIC IS HERE: Tracking both what is equipped AND what is owned
   const equippedIds = new Set(goose?.accessories.map((a) => a.accessoryId) ?? []);
   const ownedIds = new Set(goose?.ownedAccessories ?? []);
-  console.log("ownedIds", [...ownedIds]);
-  console.log("accessory ids", ACCESSORIES.map(a => a.id));
 
   const filteredAccessories = selectedCategory === "all"
     ? ACCESSORIES
@@ -98,7 +95,6 @@ export default function Shop() {
   }
 
   async function handleEquip(accessory: Accessory) {
-    // Only check affordability if they don't own it yet
     if (!ownedIds.has(accessory.id) && !canAfford(accessory.cost)) return;
 
     setPurchasingId(accessory.id);
@@ -133,7 +129,6 @@ export default function Shop() {
     <div className="min-h-screen bg-cream">
       <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col gap-6">
 
-        {/* --- Top Header & Goose UI (Omitted for brevity, keeping it identical) --- */}
         <div className="flex items-center gap-3">
           <ShoppingBag className="w-8 h-8 text-avocado" />
           <h1 className="font-display text-3xl font-black text-forest">Shop</h1>
@@ -208,6 +203,55 @@ export default function Shop() {
               </button>
             </div>
 
+            {activeTab === "food" && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {FOOD_ITEMS.map((food) => {
+                  const locked = isFoodLocked(food);
+                  const affordable = canAfford(food.cost);
+                  const purchasing = purchasingId === food.id;
+                  const feedback = feedbackMap[food.id];
+
+                  return (
+                    <div key={food.id} className={`relative card p-4 flex flex-col items-center gap-2.5 transition-all hover:shadow-card-hover ${locked ? "opacity-50" : ""}`}>
+                      {feedback && (
+                        <div className="absolute top-2 right-2 bg-avocado text-white text-xs font-black px-2 py-0.5 rounded-full animate-bounce">
+                          +{feedback} pts
+                        </div>
+                      )}
+
+                      <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-3">
+                        {food.imageUrl ? (
+                          <img src={food.imageUrl} alt={food.name} className="w-full h-full object-contain" />
+                        ) : (
+                          <span className="text-3xl">🍞</span>
+                        )}
+                      </div>
+
+                      <p className="font-display font-black text-forest text-sm text-center">{food.name}</p>
+
+                      <div className="flex items-center justify-between w-full">
+                        <span className="flex items-center gap-1 text-avocado text-sm font-black">
+                          <Zap className="w-3.5 h-3.5" />{food.cost}
+                        </span>
+
+                        {locked ? (
+                          <span className="flex items-center gap-1 text-xs font-bold text-forest/40">
+                            <Lock className="w-3 h-3" /> Locked
+                          </span>
+                        ) : affordable ? (
+                          <Button variant="primary" size="sm" className="text-xs py-1 px-3 rounded-xl font-bold" disabled={purchasing} isLoading={purchasing} onClick={() => handleBuyFood(food)}>
+                            Feed
+                          </Button>
+                        ) : (
+                          <span className="text-sm font-black text-forest/50">Not enough pts</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {activeTab === "accessories" && (
               <div className="flex flex-col gap-4">
                 <div className="flex gap-2 flex-wrap">
@@ -240,7 +284,6 @@ export default function Shop() {
                             {!owned && <><Zap className="w-3.5 h-3.5" />{accessory.cost}</>}
                           </span>
 
-                          {/* SMART BUTTONS */}
                           {equipped ? (
                             <Button variant="primary" size="sm" className="text-xs py-1 px-3 rounded-xl font-bold bg-ocean/10 text-ocean border-ocean/20 border hover:bg-ocean/20 hover:text-ocean" disabled={purchasing} isLoading={purchasing} onClick={() => handleUnequip(accessory)}>
                               Unequip
