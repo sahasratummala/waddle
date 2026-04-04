@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bird, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useAuthStore } from "@/store/authStore";
 
@@ -85,8 +85,8 @@ export default function Register() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <Link to="/" className="flex items-center gap-2.5 mb-4">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-avocado/15 border-2 border-avocado/30">
-              <Bird className="w-7 h-7 text-avocado" />
+            <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center bg-avocado/15 border-2 border-avocado/30">
+              <img src="/goose/hatchling.png" alt="Waddle" className="w-full h-full object-contain" />
             </div>
           </Link>
           <h1 className="font-display text-3xl font-black text-forest">Hatch an Egg</h1>
