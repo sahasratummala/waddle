@@ -2,9 +2,9 @@ import { useState } from "react";
 import { Gamepad2 } from "lucide-react";
 import { GameType } from "@waddle/shared";
 import { useAuthStore } from "@/store/authStore";
-import { getSocket, connectSocket } from "@/lib/socket";
-import { supabase } from "@/lib/supabase";
+import { connectSocket, disconnectSocket } from "@/lib/socket";
 import BreadcrumbGame from "@/components/games/BreadcrumbGame";
+import MazeGame from "@/components/games/MazeGame";
 
 const GAMES = [
     {
@@ -32,7 +32,7 @@ const SOLO_ROOM = "SOLO_GAME";
 export default function Games() {
     const { user, session } = useAuthStore();
     const [activeGame, setActiveGame] = useState<GameType | null>(null);
-    const [socket, setSocket] = useState<ReturnType<typeof getSocket> | null>(null);
+    const [socket, setSocket] = useState<ReturnType<typeof connectSocket> | null>(null);
 
     async function handleSelectGame(type: GameType) {
         if (type === GameType.BREADCRUMB) {
@@ -47,7 +47,7 @@ export default function Games() {
     function handleBack() {
         setActiveGame(null);
         if (socket) {
-            socket.disconnect();
+            disconnectSocket();
             setSocket(null);
         }
     }
@@ -81,39 +81,37 @@ export default function Games() {
                     </div>
                 )}
 
+                {activeGame === GameType.MAZE && user && (
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="font-display font-black text-forest text-lg">Goose Maze</h2>
+                            <button onClick={handleBack} className="text-sm text-forest/50 hover:text-forest font-medium">Back</button>
+                        </div>
+                        <div className="card p-4">
+                            <MazeGame
+                                roomCode={SOLO_ROOM}
+                                userId={user.id}
+                                username={user.username || "Goose"}
+                                onGameEnd={handleBack}
+                            />
+                        </div>
+                    </div>
+                )}
+
                 {activeGame === GameType.BREADCRUMB && socket && user && (
                     <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between">
                             <h2 className="font-display font-black text-forest text-lg">Breadcrumb Tap</h2>
-                            <button
-                                onClick={handleBack}
-                                className="text-sm text-forest/50 hover:text-forest font-medium"
-                            >
-                                Back
-                            </button>
+                            <button onClick={handleBack} className="text-sm text-forest/50 hover:text-forest font-medium">Back</button>
                         </div>
                         <div className="card p-6">
                             <BreadcrumbGame
                                 socket={socket}
                                 roomCode={SOLO_ROOM}
                                 userId={user.id}
-                                username={user.username}
-                                onGameEnd={(rankings) => {
-                                    console.log("Game ended", rankings);
-                                }}
+                                username={user.username || "Goose"}
+                                onGameEnd={handleBack}
                             />
-                        </div>
-                    </div>
-                )}
-
-                {activeGame === GameType.MAZE && (
-                    <div className="flex flex-col items-center gap-4">
-                        <div className="flex items-center justify-between w-full">
-                            <h2 className="font-display font-black text-forest text-lg">Goose Maze</h2>
-                            <button onClick={handleBack} className="text-sm text-forest/50 hover:text-forest font-medium">Back</button>
-                        </div>
-                        <div className="card p-8 w-full flex items-center justify-center">
-                            <p className="text-forest/30 text-sm font-medium">Maze coming soon</p>
                         </div>
                     </div>
                 )}
@@ -124,16 +122,9 @@ export default function Games() {
                             <h2 className="font-display font-black text-forest text-lg">Pictionary</h2>
                             <button onClick={handleBack} className="text-sm text-forest/50 hover:text-forest font-medium">Back</button>
                         </div>
-                        <canvas
-                            width={320}
-                            height={240}
-                            className="bg-white rounded-2xl border-2 border-forest/10 cursor-crosshair"
-                        />
-                        <input
-                            type="text"
-                            placeholder="Type your guess..."
-                            className="input-base max-w-xs text-sm"
-                        />
+                        <div className="card p-8 w-full flex items-center justify-center">
+                            <p className="text-forest/30 text-sm font-medium">Coming soon</p>
+                        </div>
                     </div>
                 )}
             </div>

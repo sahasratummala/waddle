@@ -33,7 +33,7 @@ export default function FlockPartyRoom() {
   const {
     room, timerState, messages, joinRoom,
     leaveRoom, startStudy, sendMessage,
-    currentGame, launchGame, completionData,
+    currentGame, gameData, completionData,
   } = useFlockStore();
 
   const [codeCopied, setCodeCopied] = useState(false);
@@ -97,7 +97,8 @@ export default function FlockPartyRoom() {
         };
       });
     };
-    if (currentGame === "MAZE") return <MazeGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
+    const mazeData = gameData as { seed?: number; size?: number } | null;
+    if (currentGame === "MAZE") return <MazeGame {...gameProps} seed={mazeData?.seed} size={mazeData?.size} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
     if (currentGame === "BREADCRUMB") return <BreadcrumbGame {...gameProps} onPointsEarned={handlePointsEarned} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
     if (currentGame === "PICTIONARY") return <PictionaryGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
     return null;

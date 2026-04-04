@@ -1,305 +1,495 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Socket } from "socket.io-client";
+import { useState, useEffect, useCallback, useRef } from "react";
+import type { Socket } from "socket.io-client";
 
 interface MazeGameProps {
-  socket: Socket;
+  socket?: Socket | null;
   roomCode: string;
   userId: string;
   username: string;
-  onGameEnd: (winnerId: string, winnerName: string) => void;
+  onGameEnd?: () => void;
+  seed?: number;
+  size?: number;
 }
 
 interface Cell {
-  row: number;
-  col: number;
-  walls: { top: boolean; right: boolean; bottom: boolean; left: boolean };
-  visited: boolean;
+  right: boolean; // wall on the right edge of this cell
+  bottom: boolean; // wall on the bottom edge of this cell
 }
 
-const COLS = 11;
-const ROWS = 11;
-const CELL_SIZE = 36;
+interface Pos {
+  r: number;
+  c: number;
+}
 
-type MazeSeed = number;
+interface OtherPlayer {
+  userId: string;
+  username: string;
+  pos: Pos;
+  finished: boolean;
+}
 
-function seededMaze(seed: MazeSeed) {
-  let s = seed;
-  const rand = () => {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return (s >>> 0) / 0xffffffff;
+interface FinishRecord {
+  userId: string;
+  username: string;
+  rank: number;
+  timeSeconds: number;
+}
+
+const CELL = 32;
+const GOOSE_COLORS = ["#898433", "#7E9DA2", "#45441A", "#6E6A28", "#56777D", "#282C15"];
+
+// Simple seeded LCG random
+function makeRng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 0x100000000;
   };
+}
 
-  const grid: Cell[][] = Array.from({ length: ROWS }, (_, r) =>
-    Array.from({ length: COLS }, (_, c) => ({
-      row: r, col: c,
-      walls: { top: true, right: true, bottom: true, left: true },
-      visited: false,
+// Recursive-backtracker maze
+function buildMaze(seed: number, size: number): Cell[][] {
+  const rng = makeRng(seed);
+  const grid: Cell[][] = Array.from({ length: size }, (_, r) =>
+    Array.from({ length: size }, (_, c) => ({
+      right: c < size - 1,
+      bottom: r < size - 1,
     }))
   );
+  const visited = Array.from({ length: size }, () => new Array(size).fill(false));
 
-  const stack: Cell[] = [];
-  grid[0][0].visited = true;
-  stack.push(grid[0][0]);
+  function shuffle<T>(arr: T[]): T[] {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
 
-  while (stack.length > 0) {
-    const current = stack[stack.length - 1];
-    const { row, col } = current;
-    const neighbors: { cell: Cell; dir: string }[] = [];
-
-    if (row > 0 && !grid[row - 1][col].visited)
-      neighbors.push({ cell: grid[row - 1][col], dir: "top" });
-    if (col < COLS - 1 && !grid[row][col + 1].visited)
-      neighbors.push({ cell: grid[row][col + 1], dir: "right" });
-    if (row < ROWS - 1 && !grid[row + 1][col].visited)
-      neighbors.push({ cell: grid[row + 1][col], dir: "bottom" });
-    if (col > 0 && !grid[row][col - 1].visited)
-      neighbors.push({ cell: grid[row][col - 1], dir: "left" });
-
-    if (neighbors.length === 0) {
-      stack.pop();
-    } else {
-      const idx = Math.floor(rand() * neighbors.length);
-      const { cell: next, dir } = neighbors[idx];
-      if (dir === "top") { current.walls.top = false; next.walls.bottom = false; }
-      if (dir === "right") { current.walls.right = false; next.walls.left = false; }
-      if (dir === "bottom") { current.walls.bottom = false; next.walls.top = false; }
-      if (dir === "left") { current.walls.left = false; next.walls.right = false; }
-      next.visited = true;
-      stack.push(next);
+  function carve(r: number, c: number) {
+    visited[r][c] = true;
+    for (const [dr, dc] of shuffle([[0, 1], [1, 0], [0, -1], [-1, 0]] as [number, number][])) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= size || nc < 0 || nc >= size || visited[nr][nc]) continue;
+      // Remove wall between (r,c) and (nr,nc)
+      if (dr === 0 && dc === 1) grid[r][c].right = false;
+      else if (dr === 0 && dc === -1) grid[nr][nc].right = false;
+      else if (dr === 1 && dc === 0) grid[r][c].bottom = false;
+      else if (dr === -1 && dc === 0) grid[nr][nc].bottom = false;
+      carve(nr, nc);
     }
   }
 
+  carve(0, 0);
   return grid;
 }
 
-export default function MazeGame({ socket, roomCode, userId, username, onGameEnd }: MazeGameProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [maze, setMaze] = useState<Cell[][] | null>(null);
-  const [path, setPath] = useState<{ x: number; y: number }[]>([]);
-  const [drawing, setDrawing] = useState(false);
-  const [winner, setWinner] = useState<{ id: string; name: string } | null>(null);
-  const [seed] = useState(() => Math.floor(Math.random() * 100000));
-  const posRef = useRef({ row: 0, col: 0 });
-  const displayRef = useRef({ x: CELL_SIZE / 2 + 1, y: CELL_SIZE / 2 + 1 });
-  const animRef = useRef<number | null>(null);
+function canStep(grid: Cell[][], pos: Pos, dir: "up" | "down" | "left" | "right", size: number): boolean {
+  const { r, c } = pos;
+  if (dir === "right") return c < size - 1 && !grid[r][c].right;
+  if (dir === "down")  return r < size - 1 && !grid[r][c].bottom;
+  if (dir === "left")  return c > 0 && !grid[r][c - 1].right;
+  if (dir === "up")    return r > 0 && !grid[r - 1][c].bottom;
+  return false;
+}
 
-  const centerOf = (row: number, col: number) => ({
-    x: col * CELL_SIZE + CELL_SIZE / 2 + 1,
-    y: row * CELL_SIZE + CELL_SIZE / 2 + 1,
-  });
+function fmtTime(s: number) {
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
 
+export default function MazeGame({
+  socket,
+  roomCode,
+  userId,
+  username,
+  onGameEnd,
+  seed: seedProp,
+  size = 8,
+}: MazeGameProps) {
+  const isSolo = !socket || roomCode === "SOLO_GAME";
+
+  // Derive a consistent seed from roomCode if none provided
+  const seed = seedProp ?? (() => {
+    let h = 5381;
+    for (let i = 0; i < roomCode.length; i++) h = ((h << 5) + h + roomCode.charCodeAt(i)) >>> 0;
+    return (h % 9000) + 1000;
+  })();
+
+  const [round, setRound] = useState(0);
+  const [phase, setPhase] = useState<"countdown" | "playing" | "results">("countdown");
+  const [countdown, setCountdown] = useState(3);
+  const [pos, setPos] = useState<Pos>({ r: 0, c: 0 });
+  const [elapsed, setElapsed] = useState(0);
+  const [myTime, setMyTime] = useState<number | null>(null);
+  const [others, setOthers] = useState<OtherPlayer[]>([]);
+  const [finished, setFinished] = useState<FinishRecord[]>([]);
+  const [myRank, setMyRank] = useState<number | null>(null);
+
+  const grid = useRef(buildMaze(seed + round, size));
+  const phaseRef = useRef<"countdown" | "playing" | "results">("countdown");
+  const startTimeRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Full reset on new round
   useEffect(() => {
-    if (roomCode === "SOLO_GAME") {
-      setMaze(seededMaze(seed));
-      return;
-    }
+    grid.current = buildMaze(seed + round, size);
+    phaseRef.current = "countdown";
+    startTimeRef.current = null;
+    if (timerRef.current) clearInterval(timerRef.current);
+    setPhase("countdown");
+    setCountdown(3);
+    setPos({ r: 0, c: 0 });
+    setElapsed(0);
+    setMyTime(null);
+    setOthers([]);
+    setFinished([]);
+    setMyRank(null);
 
-    socket.on("maze:seed", (incomingSeed: number) => {
-      setMaze(seededMaze(incomingSeed));
-    });
-
-    socket.on("maze:winner", (data: { userId: string; username: string }) => {
-      setWinner({ id: data.userId, name: data.username });
-      onGameEnd(data.userId, data.username);
-    });
-
-    socket.emit("maze:sync_seed", { roomCode, seed });
+    let c = 3;
+    const iv = setInterval(() => {
+      c--;
+      if (c <= 0) {
+        clearInterval(iv);
+        const now = Date.now();
+        startTimeRef.current = now;
+        phaseRef.current = "playing";
+        setPhase("playing");
+        timerRef.current = setInterval(() => {
+          setElapsed(Math.floor((Date.now() - startTimeRef.current!) / 1000));
+        }, 250);
+      } else {
+        setCountdown(c);
+      }
+    }, 1000);
 
     return () => {
-      socket.off("maze:seed");
-      socket.off("maze:winner");
-      if (animRef.current) cancelAnimationFrame(animRef.current);
+      clearInterval(iv);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [socket, roomCode, seed, onGameEnd]);
+  }, [round]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const drawMaze = useCallback((currentPath: { x: number; y: number }[]) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !maze) return;
-    const ctx = canvas.getContext("2d")!;
-    const W = COLS * CELL_SIZE + 2;
-    const H = ROWS * CELL_SIZE + 2;
-    canvas.width = W;
-    canvas.height = H;
-    ctx.clearRect(0, 0, W, H);
+  const move = useCallback((dir: "up" | "down" | "left" | "right") => {
+    if (phaseRef.current !== "playing") return;
 
-    // Finish square
-    ctx.fillStyle = "#9FE1CB";
-    ctx.beginPath();
-    (ctx as any).roundRect((COLS - 1) * CELL_SIZE + 1, (ROWS - 1) * CELL_SIZE + 1, CELL_SIZE - 1, CELL_SIZE - 1, 6);
-    ctx.fill();
-    ctx.font = "14px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("🏁", (COLS - 1) * CELL_SIZE + CELL_SIZE / 2 + 1, (ROWS - 1) * CELL_SIZE + CELL_SIZE / 2 + 1);
+    setPos((prev) => {
+      if (!canStep(grid.current, prev, dir, size)) return prev;
 
-    // Walls
-    ctx.strokeStyle = "#97C459";
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        const cell = maze[r][c];
-        const x = c * CELL_SIZE + 1;
-        const y = r * CELL_SIZE + 1;
-        ctx.beginPath();
-        if (cell.walls.top) { ctx.moveTo(x, y); ctx.lineTo(x + CELL_SIZE, y); }
-        if (cell.walls.right) { ctx.moveTo(x + CELL_SIZE, y); ctx.lineTo(x + CELL_SIZE, y + CELL_SIZE); }
-        if (cell.walls.bottom) { ctx.moveTo(x, y + CELL_SIZE); ctx.lineTo(x + CELL_SIZE, y + CELL_SIZE); }
-        if (cell.walls.left) { ctx.moveTo(x, y); ctx.lineTo(x, y + CELL_SIZE); }
-        ctx.stroke();
+      const next: Pos = {
+        r: prev.r + (dir === "down" ? 1 : dir === "up" ? -1 : 0),
+        c: prev.c + (dir === "right" ? 1 : dir === "left" ? -1 : 0),
+      };
+
+      // Emit position
+      if (!isSolo && socket) {
+        socket.emit("maze-move", {
+          roomCode,
+          userId,
+          direction: dir.toUpperCase(),
+          position: { x: next.c, y: next.r },
+        });
       }
-    }
 
-    // Path trail
-    if (currentPath.length > 1) {
-      ctx.strokeStyle = "#C0DD97";
-      ctx.lineWidth = 6;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(currentPath[0].x, currentPath[0].y);
-      for (const p of currentPath.slice(1)) ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-    }
+      // Reached exit
+      if (next.r === size - 1 && next.c === size - 1) {
+        const timeSeconds = startTimeRef.current
+          ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+          : 0;
+        if (timerRef.current) clearInterval(timerRef.current);
+        phaseRef.current = "results";
+        setPhase("results");
+        setMyTime(timeSeconds);
 
-    // Player
-    const { x: px, y: py } = displayRef.current;
-    ctx.fillStyle = "rgba(99,153,34,0.15)";
-    ctx.beginPath();
-    ctx.arc(px, py, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#639922";
-    ctx.beginPath();
-    ctx.arc(px, py, 11, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.font = "13px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("🐣", px, py);
-  }, [maze]);
-
-  const animateTo = useCallback((tx: number, ty: number, currentPath: { x: number; y: number }[]) => {
-    if (animRef.current) cancelAnimationFrame(animRef.current);
-    const step = () => {
-      displayRef.current.x += (tx - displayRef.current.x) * 0.35;
-      displayRef.current.y += (ty - displayRef.current.y) * 0.35;
-      drawMaze(currentPath);
-      if (Math.abs(displayRef.current.x - tx) > 0.5 || Math.abs(displayRef.current.y - ty) > 0.5) {
-        animRef.current = requestAnimationFrame(step);
-      } else {
-        displayRef.current.x = tx;
-        displayRef.current.y = ty;
-        drawMaze(currentPath);
-      }
-    };
-    step();
-  }, [drawMaze]);
-
-  useEffect(() => {
-    if (!maze) return;
-    drawMaze(path);
-  }, [maze, drawMaze]);
-
-  const cellFromCanvas = (x: number, y: number) => ({
-    col: Math.floor((x - 1) / CELL_SIZE),
-    row: Math.floor((y - 1) / CELL_SIZE),
-  });
-
-  const canMove = (from: { row: number; col: number }, to: { row: number; col: number }) => {
-    if (!maze) return false;
-    const dr = to.row - from.row;
-    const dc = to.col - from.col;
-    if (Math.abs(dr) + Math.abs(dc) !== 1) return false;
-    const cell = maze[from.row][from.col];
-    if (dr === -1 && cell.walls.top) return false;
-    if (dr === 1 && cell.walls.bottom) return false;
-    if (dc === 1 && cell.walls.right) return false;
-    if (dc === -1 && cell.walls.left) return false;
-    return true;
-  };
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (winner || !maze) return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
-    const cell = cellFromCanvas(x, y);
-    if (cell.row === posRef.current.row && cell.col === posRef.current.col) {
-      setDrawing(true);
-      const c = centerOf(posRef.current.row, posRef.current.col);
-      setPath([c]);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!drawing || !maze) return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
-    const cell = cellFromCanvas(x, y);
-
-    if (
-      cell.row >= 0 && cell.row < ROWS && cell.col >= 0 && cell.col < COLS &&
-      canMove(posRef.current, cell)
-    ) {
-      posRef.current = cell;
-      const c = centerOf(cell.row, cell.col);
-      const newPath = [...path, c];
-      setPath(newPath);
-      animateTo(c.x, c.y, newPath);
-
-      if (cell.row === ROWS - 1 && cell.col === COLS - 1) {
-        if (roomCode !== "SOLO_GAME") {
-          socket.emit("maze:solved", { roomCode, userId, username });
+        if (!isSolo && socket) {
+          socket.emit("maze-complete", { roomCode, userId, timeSeconds });
         }
-        setWinner({ id: userId, name: username });
-        onGameEnd(userId, username);
-        setDrawing(false);
       }
-    }
+
+      return next;
+    });
+  }, [isSolo, socket, roomCode, userId, size]);
+
+  // Keyboard
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const map: Record<string, "up" | "down" | "left" | "right"> = {
+        ArrowUp: "up", w: "up", ArrowDown: "down", s: "down",
+        ArrowLeft: "left", a: "left", ArrowRight: "right", d: "right",
+      };
+      const dir = map[e.key];
+      if (dir) { e.preventDefault(); move(dir); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [move]);
+
+  // Touch swipe
+  const touchOrigin = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchOrigin.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (!touchOrigin.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchOrigin.current.x;
+    const dy = t.clientY - touchOrigin.current.y;
+    touchOrigin.current = null;
+    if (Math.abs(dx) < 15 && Math.abs(dy) < 15) return;
+    if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? "right" : "left");
+    else move(dy > 0 ? "down" : "up");
   };
 
-  const handleMouseUp = () => setDrawing(false);
+  // Multiplayer listeners
+  useEffect(() => {
+    if (isSolo || !socket) return;
+    const handleMove = (data: { userId: string; username: string; position: { x: number; y: number } }) => {
+      if (data.userId === userId) return;
+      setOthers((prev) => {
+        const idx = prev.findIndex((p) => p.userId === data.userId);
+        const updated = { userId: data.userId, username: data.username, pos: { r: data.position.y, c: data.position.x }, finished: false };
+        if (idx >= 0) return prev.map((p, i) => i === idx ? { ...p, pos: updated.pos } : p);
+        return [...prev, updated];
+      });
+    };
+    const handleComplete = (data: { userId: string; rank: number; timeSeconds: number }) => {
+      if (data.userId === userId) {
+        setMyRank(data.rank);
+        return;
+      }
+      setOthers((prev) => prev.map((p) => p.userId === data.userId ? { ...p, finished: true } : p));
+      setFinished((prev) => {
+        if (prev.some((p) => p.userId === data.userId)) return prev;
+        const name = others.find((p) => p.userId === data.userId)?.username ?? "Player";
+        return [...prev, { userId: data.userId, username: name, rank: data.rank, timeSeconds: data.timeSeconds }];
+      });
+    };
+    socket.on("maze-move", handleMove);
+    socket.on("maze-complete", handleComplete);
+    return () => { socket.off("maze-move", handleMove); socket.off("maze-complete", handleComplete); };
+  }, [isSolo, socket, userId, others]);
 
-  if (!maze) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-400 text-lg animate-pulse">🌱 Growing the maze…</p>
-      </div>
-    );
-  }
+  const allFinished: FinishRecord[] = myTime !== null
+    ? [{ userId, username, rank: myRank ?? 1, timeSeconds: myTime }, ...finished]
+    : finished;
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="flex items-center gap-4 flex-wrap justify-center text-xs text-gray-400">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-full bg-green-600"></span> You
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded bg-teal-300"></span> Finish
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-5 h-1 rounded bg-green-200"></span> Your path
-        </span>
-      </div>
-
-      {winner && (
-        <div className="bg-green-50 border-2 border-green-300 rounded-2xl px-6 py-3 text-green-800 font-semibold text-lg">
-          🌸 {winner.name} made it! 🌸
+    <div
+      className="flex flex-col items-center gap-4 select-none"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Countdown */}
+      {phase === "countdown" && (
+        <div className="flex flex-col items-center gap-3 py-8">
+          <p className="text-forest/50 text-sm font-medium">Navigate your goose to the exit! 🚪</p>
+          <div
+            key={`${round}-${countdown}`}
+            className="text-9xl font-black text-avocado"
+            style={{ animation: "mazePop 0.9s ease-in-out" }}
+          >
+            {countdown}
+          </div>
+          <p className="text-xs text-forest/30 font-medium">Arrow keys · WASD · D-pad · Swipe</p>
         </div>
       )}
 
-      <canvas
-        ref={canvasRef}
-        className="rounded-2xl touch-none"
-        style={{ border: "2.5px solid #97C459", maxWidth: "100%", imageRendering: "crisp-edges", cursor: "crosshair" }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      />
+      {phase !== "countdown" && (
+        <>
+          {/* Timer row */}
+          <div className="flex items-center gap-3 text-sm font-bold text-forest/60">
+            <span>⏱ {fmtTime(myTime ?? elapsed)}</span>
+            {!isSolo && (
+              <span className="text-forest/30">
+                · {[...others.filter((p) => p.finished), ...(myTime !== null ? [{}] : [])].length}/{others.length + 1} done
+              </span>
+            )}
+          </div>
 
-      <p className="text-xs text-gray-400">Click your 🐣, then drag through the passages</p>
+          {/* Maze */}
+          <div
+            className="relative"
+            style={{
+              border: "3px solid #282C15",
+              borderRadius: 6,
+              background: "#F5F2EA",
+              display: "inline-block",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${size}, ${CELL}px)`,
+                gridTemplateRows: `repeat(${size}, ${CELL}px)`,
+              }}
+            >
+              {grid.current.map((row, r) =>
+                row.map((cell, c) => {
+                  const isExit = r === size - 1 && c === size - 1;
+                  const isEntry = r === 0 && c === 0;
+                  const myHere = pos.r === r && pos.c === c;
+                  const othersHere = others.filter((o) => o.pos.r === r && o.pos.c === c);
+
+                  return (
+                    <div
+                      key={`${r}-${c}`}
+                      style={{
+                        width: CELL,
+                        height: CELL,
+                        borderRight: cell.right ? "2px solid #282C15" : "2px solid transparent",
+                        borderBottom: cell.bottom ? "2px solid #282C15" : "2px solid transparent",
+                        background: isExit ? "rgba(137,132,51,0.18)" : isEntry ? "rgba(126,157,162,0.12)" : undefined,
+                        position: "relative",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {isExit && <span style={{ fontSize: 16, lineHeight: 1, pointerEvents: "none" }}>🚪</span>}
+
+                      {/* Other players */}
+                      {othersHere.map((o, i) => (
+                        <div
+                          key={o.userId}
+                          style={{
+                            position: "absolute",
+                            top: 3, right: 3,
+                            width: 16, height: 16,
+                            borderRadius: "50%",
+                            background: GOOSE_COLORS[(i + 1) % GOOSE_COLORS.length],
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 8, color: "white", fontWeight: "bold",
+                            opacity: o.finished ? 0.35 : 0.9,
+                          }}
+                        >
+                          {o.username[0]?.toUpperCase()}
+                        </div>
+                      ))}
+
+                      {/* This player */}
+                      {myHere && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            width: 24, height: 24,
+                            borderRadius: "50%",
+                            background: "#898433",
+                            border: "2px solid #282C15",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 13,
+                            zIndex: 5,
+                            opacity: phase === "results" ? 0.6 : 1,
+                          }}
+                        >
+                          🪿
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* D-pad */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 44px)", gridTemplateRows: "repeat(2, 44px)", gap: 6 }}>
+            <div />
+            <button
+              onPointerDown={(e) => { e.preventDefault(); move("up"); }}
+              className="rounded-xl bg-forest/8 hover:bg-forest/15 active:bg-forest/25 flex items-center justify-center text-forest font-black text-base transition-colors"
+            >↑</button>
+            <div />
+            <button
+              onPointerDown={(e) => { e.preventDefault(); move("left"); }}
+              className="rounded-xl bg-forest/8 hover:bg-forest/15 active:bg-forest/25 flex items-center justify-center text-forest font-black text-base transition-colors"
+            >←</button>
+            <button
+              onPointerDown={(e) => { e.preventDefault(); move("down"); }}
+              className="rounded-xl bg-forest/8 hover:bg-forest/15 active:bg-forest/25 flex items-center justify-center text-forest font-black text-base transition-colors"
+            >↓</button>
+            <button
+              onPointerDown={(e) => { e.preventDefault(); move("right"); }}
+              className="rounded-xl bg-forest/8 hover:bg-forest/15 active:bg-forest/25 flex items-center justify-center text-forest font-black text-base transition-colors"
+            >→</button>
+          </div>
+        </>
+      )}
+
+      {/* Results */}
+      {phase === "results" && (
+        <div className="w-full flex flex-col gap-3 max-w-sm">
+          <h3 className="text-center font-display font-black text-forest text-2xl">Maze Done! 🪿</h3>
+
+          <div className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-avocado/10 border-2 border-avocado/20">
+            <span className="text-avocado font-black text-lg">{fmtTime(myTime ?? elapsed)}</span>
+            <span className="text-avocado/70 text-sm font-semibold">your time</span>
+            {myRank === 1 && !isSolo && (
+              <span className="text-xs bg-avocado text-white px-2 py-0.5 rounded-full font-bold ml-1">1st! 🏆</span>
+            )}
+          </div>
+
+          {!isSolo && allFinished.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-forest/40 text-xs font-bold uppercase tracking-wider text-center">Leaderboard</p>
+              {[...allFinished].sort((a, b) => a.timeSeconds - b.timeSeconds).map((p, i) => (
+                <div
+                  key={p.userId}
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl border-2 ${
+                    i === 0 ? "bg-avocado/10 border-avocado/30" : "bg-cream border-forest/10"
+                  }`}
+                >
+                  <span className={`text-lg font-black w-6 text-center ${i === 0 ? "text-avocado" : "text-forest/30"}`}>{i + 1}</span>
+                  <div
+                    className="flex items-center justify-center rounded-full text-white font-black text-sm shrink-0"
+                    style={{ width: 34, height: 34, background: GOOSE_COLORS[i % GOOSE_COLORS.length] }}
+                  >
+                    {p.username[0]?.toUpperCase()}
+                  </div>
+                  <span className="flex-1 font-bold text-forest truncate">{p.username}</span>
+                  <span className="text-sm text-forest/50 font-mono font-semibold">{fmtTime(p.timeSeconds)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 mt-1">
+            {isSolo && (
+              <button
+                onClick={() => setRound((r) => r + 1)}
+                className="flex-1 py-3 rounded-2xl font-display font-black text-white text-sm transition-all active:scale-95"
+                style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
+              >
+                Play Again
+              </button>
+            )}
+            {!isSolo && (
+              <>
+                <button
+                  onClick={() => setRound((r) => r + 1)}
+                  className="flex-1 py-3 rounded-2xl font-display font-black text-forest text-sm border-2 border-forest/15 bg-white transition-all active:scale-95"
+                >
+                  Play Again
+                </button>
+                <button
+                  onClick={() => onGameEnd?.()}
+                  className="flex-1 py-3 rounded-2xl font-display font-black text-white text-sm transition-all active:scale-95"
+                  style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
+                >
+                  Back to Room
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes mazePop {
+          0%   { transform: scale(0.5); opacity: 0; }
+          60%  { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(1);   opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
