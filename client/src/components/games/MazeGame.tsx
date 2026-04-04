@@ -196,7 +196,10 @@ export default function MazeGame({
         setPhase("results");
         setMyTime(timeSeconds);
 
-        if (!isSolo && socket) {
+        if (isSolo) {
+          // Solo: award a flat 15 pts for finishing
+          onPointsEarned?.(15);
+        } else if (socket) {
           socket.emit("maze-complete", { roomCode, userId, username, timeSeconds });
         }
       }
@@ -458,13 +461,18 @@ export default function MazeGame({
 
           <div className="flex gap-2 mt-1">
             {isSolo && (
-              <button
-                onClick={() => setRound((r) => r + 1)}
-                className="flex-1 py-3 rounded-2xl font-display font-black text-white text-sm transition-all active:scale-95"
-                style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
-              >
-                Play Again
-              </button>
+              <div className="flex flex-col gap-2 w-full">
+                <div className="text-center py-2 rounded-xl bg-avocado/10 border border-avocado/20">
+                  <span className="text-avocado font-bold text-sm">+15 points earned! 🪿</span>
+                </div>
+                <button
+                  onClick={() => setRound((r) => r + 1)}
+                  className="w-full py-3 rounded-2xl font-display font-black text-white text-sm transition-all active:scale-95"
+                  style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
+                >
+                  Play Again
+                </button>
+              </div>
             )}
             {!isSolo && (
               <>
