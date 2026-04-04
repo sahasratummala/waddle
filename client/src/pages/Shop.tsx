@@ -55,9 +55,9 @@ export default function Shop() {
     setActiveTab(isFullGoose ? "accessories" : "food");
   }, [isFullGoose]);
 
-  const progress = user ? getEvolutionProgress(user.pointsTotal) : { current: 0, needed: 100, percentage: 0 };
+  const progress = getEvolutionProgress();
   const nextStage = NEXT_STAGE[stage];
-  const canEvolve = nextStage && user ? user.pointsTotal >= GOOSE_EVOLUTION_THRESHOLDS[nextStage] : false;
+  const canEvolve = nextStage && goose ? goose.evolutionPoints >= GOOSE_EVOLUTION_THRESHOLDS[nextStage] : false;
   const equippedIds = new Set(goose?.accessories.map((a) => a.accessoryId) ?? []);
 
   const filteredAccessories = selectedCategory === "all"
@@ -175,7 +175,7 @@ export default function Shop() {
               )}
 
               {nextStage && (
-                <Button variant="primary" fullWidth size="sm" disabled={!canEvolve} isLoading={evolvingLoading} onClick={handleEvolve} className="rounded-xl font-black">
+                <Button variant="primary" fullWidth size="sm" disabled={!canEvolve} isLoading={evolvingLoading} onClick={handleEvolve}>
                   {canEvolve ? `Evolve to ${STAGE_NAMES[nextStage]}!` : `${progress.needed - progress.current} pts to evolve`}
                 </Button>
               )}
@@ -193,10 +193,10 @@ export default function Shop() {
               <button
                 onClick={() => !isFullGoose && setActiveTab("food")}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold border-2 transition-all ${activeTab === "food" && !isFullGoose
-                    ? "bg-avocado text-white border-avocado"
-                    : isFullGoose
-                      ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
-                      : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
+                  ? "bg-avocado text-white border-avocado"
+                  : isFullGoose
+                    ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
+                    : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
                   }`}
               >
                 <Utensils className="w-4 h-4" />
@@ -207,10 +207,10 @@ export default function Shop() {
               <button
                 onClick={() => isFullGoose && setActiveTab("accessories")}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold border-2 transition-all ${activeTab === "accessories" && isFullGoose
-                    ? "bg-avocado text-white border-avocado"
-                    : !isFullGoose
-                      ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
-                      : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
+                  ? "bg-avocado text-white border-avocado"
+                  : !isFullGoose
+                    ? "bg-white text-forest/25 border-forest/10 cursor-not-allowed"
+                    : "bg-white text-forest/60 border-forest/15 hover:border-avocado/40"
                   }`}
               >
                 <ShoppingBag className="w-4 h-4" />
@@ -235,8 +235,7 @@ export default function Shop() {
                   return (
                     <div
                       key={food.id}
-                      className={`relative card p-4 flex flex-col items-center gap-3 transition-all ${locked ? "opacity-50" : "hover:shadow-card-hover"
-                        }`}
+                      className={`relative card p-4 flex flex-col items-center gap-2.5 transition-all ${locked ? "opacity-50" : "hover:shadow-card-hover"}`}
                     >
                       {locked && <Lock className="absolute top-3 right-3 w-3.5 h-3.5 text-forest/30" />}
                       {feedback && (
@@ -245,7 +244,7 @@ export default function Shop() {
                         </div>
                       )}
 
-                      <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-2">
+                      <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-3">
                         {food.imageUrl
                           ? <img src={food.imageUrl} alt={food.name} className="w-full h-full object-contain" />
                           : <span className="text-3xl">🍞</span>
@@ -253,26 +252,34 @@ export default function Shop() {
                       </div>
 
                       <p className="font-display font-black text-forest text-sm text-center">{food.name}</p>
-                      <p className="text-ocean text-xs font-bold">+{food.evolutionPoints} evolution pts</p>
 
                       {locked ? (
-                        <span className="text-xs text-forest/35 font-semibold">Unlocks at {STAGE_NAMES[food.unlockedAtStage]}</span>
+                        <span className="text-xs text-forest/50 font-semibold">Unlocks at {STAGE_NAMES[food.unlockedAtStage]}</span>
                       ) : (
-                        <div className="flex items-center justify-between w-full">
-                          <span className="flex items-center gap-1 text-avocado text-sm font-black">
-                            <Zap className="w-3.5 h-3.5" />{food.cost}
+                        <>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-ocean/10 border border-ocean/20 text-ocean text-xs font-bold">
+                            +{food.evolutionPoints} Evolution
                           </span>
-                          <Button
-                            variant={affordable ? "primary" : "ghost"}
-                            size="sm"
-                            className="text-xs py-1 px-3 rounded-xl font-bold"
-                            disabled={!affordable || purchasing}
-                            isLoading={purchasing}
-                            onClick={() => handleBuyFood(food)}
-                          >
-                            {affordable ? "Feed" : "Need pts"}
-                          </Button>
-                        </div>
+                          <div className="flex items-center justify-between w-full mt-0.5">
+                            <span className="flex items-center gap-1 text-avocado text-sm font-black">
+                              <Zap className="w-3.5 h-3.5" />{food.cost}
+                            </span>
+                            {affordable ? (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                className="text-xs py-1 px-3 rounded-xl font-bold"
+                                disabled={purchasing}
+                                isLoading={purchasing}
+                                onClick={() => handleBuyFood(food)}
+                              >
+                                Feed
+                              </Button>
+                            ) : (
+                              <span className="text-sm font-black text-forest/50">Not enough pts</span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   );
@@ -289,8 +296,8 @@ export default function Shop() {
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
                       className={`px-4 py-1.5 rounded-2xl text-sm font-bold border-2 transition-all capitalize ${selectedCategory === cat
-                          ? "bg-avocado text-white border-avocado"
-                          : "bg-white text-forest/60 border-forest/10 hover:border-avocado/30"
+                        ? "bg-avocado text-white border-avocado"
+                        : "bg-white text-forest/60 border-forest/10 hover:border-avocado/30"
                         }`}
                     >
                       {cat === "all" ? "All" : CATEGORY_LABELS[cat]}
@@ -307,12 +314,11 @@ export default function Shop() {
                     return (
                       <div
                         key={accessory.id}
-                        className={`relative card p-4 flex flex-col items-center gap-3 transition-all hover:shadow-card-hover ${equipped ? "ring-2 ring-ocean" : ""
-                          }`}
+                        className={`relative card p-4 flex flex-col items-center gap-2.5 transition-all hover:shadow-card-hover ${equipped ? "ring-2 ring-ocean" : ""}`}
                       >
                         {equipped && <Check className="absolute top-3 right-3 w-4 h-4 text-ocean" />}
 
-                        <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-2">
+                        <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-3">
                           {accessory.imageUrl
                             ? <img src={accessory.imageUrl} alt={accessory.name} className="w-full h-full object-contain" />
                             : <span className="text-3xl">✨</span>
@@ -327,17 +333,19 @@ export default function Shop() {
                           </span>
                           {equipped ? (
                             <span className="text-xs text-ocean font-bold">Equipped</span>
-                          ) : (
+                          ) : affordable ? (
                             <Button
-                              variant={affordable ? "primary" : "ghost"}
+                              variant="primary"
                               size="sm"
                               className="text-xs py-1 px-3 rounded-xl font-bold"
-                              disabled={!affordable || purchasing}
+                              disabled={purchasing}
                               isLoading={purchasing}
                               onClick={() => handleEquip(accessory)}
                             >
-                              {affordable ? "Equip" : "Need pts"}
+                              Equip
                             </Button>
+                          ) : (
+                            <span className="text-sm font-black text-forest/50">Not enough pts</span>
                           )}
                         </div>
                       </div>

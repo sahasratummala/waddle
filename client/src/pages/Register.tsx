@@ -89,7 +89,7 @@ export default function Register() {
               <Bird className="w-7 h-7 text-avocado" />
             </div>
           </Link>
-          <h1 className="font-display text-3xl font-black text-forest">Adopt Your Goose</h1>
+          <h1 className="font-display text-3xl font-black text-forest">Hatch an Egg</h1>
           <p className="text-sm text-forest/50 font-medium mt-1">Create Your Waddle Account</p>
         </div>
 

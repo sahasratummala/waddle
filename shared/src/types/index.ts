@@ -73,6 +73,7 @@ export interface FoodItem {
 }
 
 export interface Goose {
+  evolutionPoints: number;
   id: string;
   userId: string;
   stage: GooseStage;

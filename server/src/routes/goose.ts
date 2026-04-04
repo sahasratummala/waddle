@@ -16,7 +16,7 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =>
   if (error || !data) {
     const { data: newGoose, error: createError } = await supabaseAdmin
       .from("geese")
-      .insert({ user_id: userId, stage: GooseStage.EGG, accessories: [] })
+      .insert({ user_id: userId, stage: GooseStage.EGG, accessories: [], evolution_points: 0 })
       .select()
       .single();
     if (createError) {
@@ -29,64 +29,95 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =>
   res.json({ success: true, data });
 });
 
-router.post("/evolve", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+/**
+ * Feed the goose. Deducts points_available from the user's profile,
+ * adds evolution_points to the goose, and auto-evolves if threshold is met.
+ * points_total is NOT changed — spending points never reduces lifetime earnings.
+ */
+router.post("/feed", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { foodId, cost, evolutionPoints } = req.body as {
+    foodId?: string;
+    cost?: number;
+    evolutionPoints?: number;
+  };
   const userId = req.userId!;
+
+  if (!foodId || cost == null || evolutionPoints == null) {
+    res.status(400).json({ success: false, error: "foodId, cost, and evolutionPoints are required." });
+    return;
+  }
+
   try {
-    const { data: goose, error: gooseError } = await supabaseAdmin
-      .from("geese")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-
-    if (gooseError || !goose) {
-      res.status(404).json({ success: false, error: "Goose not found." });
-      return;
-    }
-
-    const currentStage = goose.stage as GooseStage;
-    const nextStage = NEXT_STAGE[currentStage];
-
-    if (!nextStage) {
-      res.status(400).json({ success: false, error: "Your goose is already fully evolved!" });
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabaseAdmin
+    // Check and deduct spendable points
+    const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("points_total")
+      .select("points_available")
       .eq("id", userId)
       .single();
 
-    if (profileError || !profile) {
-      res.status(500).json({ success: false, error: "Could not fetch profile." });
+    if ((profile?.points_available ?? 0) < cost) {
+      res.status(400).json({ success: false, error: "Not enough points." });
       return;
     }
 
-    const requiredPoints = GOOSE_EVOLUTION_THRESHOLDS[nextStage];
-    if (profile.points_total < requiredPoints) {
-      res.status(400).json({
-        success: false,
-        error: `You need ${requiredPoints} total points to evolve to ${nextStage}. You have ${profile.points_total}.`,
-      });
-      return;
-    }
+    const newAvailable = (profile?.points_available ?? 0) - cost;
+    await supabaseAdmin
+      .from("profiles")
+      .update({ points_available: newAvailable })
+      .eq("id", userId);
 
-    const { error: updateError } = await supabaseAdmin
+    // Add evolution points to the goose
+    const { data: goose } = await supabaseAdmin
       .from("geese")
-      .update({ stage: nextStage })
+      .select("stage, evolution_points")
+      .eq("user_id", userId)
+      .single();
+
+    const currentEvolutionPoints = (goose?.evolution_points ?? 0) + evolutionPoints;
+    const currentStage = (goose?.stage ?? GooseStage.EGG) as GooseStage;
+
+    // Check if the goose should evolve
+    const nextStage = NEXT_STAGE[currentStage];
+    const threshold = nextStage ? GOOSE_EVOLUTION_THRESHOLDS[nextStage] : null;
+    const shouldEvolve = threshold !== null && currentEvolutionPoints >= threshold;
+    const newStage = shouldEvolve && nextStage ? nextStage : currentStage;
+
+    await supabaseAdmin
+      .from("geese")
+      .update({
+        evolution_points: currentEvolutionPoints,
+        stage: newStage,
+      })
       .eq("user_id", userId);
 
-    if (updateError) {
-      res.status(500).json({ success: false, error: "Evolution failed." });
-      return;
-    }
+    // Log the spend
+    await supabaseAdmin.from("point_transactions").insert({
+      user_id: userId,
+      amount: -cost,
+      reason: `Fed goose: ${foodId}`,
+    });
 
-    res.json({ success: true, data: { stage: nextStage, previousStage: currentStage } });
-  } catch {
-    res.status(500).json({ success: false, error: "Evolution failed." });
+    res.json({
+      success: true,
+      data: {
+        pointsAvailable: newAvailable,
+        evolutionPoints: currentEvolutionPoints,
+        stage: newStage,
+        evolved: shouldEvolve,
+        newStage: shouldEvolve ? newStage : undefined,
+      },
+    });
+  } catch (err) {
+    console.error("[goose/feed]", err);
+    res.status(500).json({ success: false, error: "Failed to feed goose." });
   }
 });
 
+/**
+ * Equip or unequip an accessory.
+ * Equipping deducts points_available (points_total stays the same).
+ * Accessories are immediately reflected on the goose.
+ */
 router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { accessoryId, action } = req.body as {
     accessoryId?: string;
@@ -115,6 +146,7 @@ router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Re
       goose.accessories ?? [];
 
     let updatedAccessories: typeof currentAccessories;
+    let newAvailable: number | undefined;
 
     if (action === "equip") {
       if (currentAccessories.some((a) => a.accessoryId === accessoryId)) {
@@ -122,6 +154,7 @@ router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Re
         return;
       }
 
+      // Look up cost from static list (fallback 0 if not in DB)
       const { data: accessory } = await supabaseAdmin
         .from("accessories")
         .select("cost")
@@ -141,10 +174,22 @@ router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Re
         return;
       }
 
+      newAvailable = (profile?.points_available ?? 0) - cost;
+
+      // Deduct points_available only — points_total unchanged
       await supabaseAdmin
         .from("profiles")
-        .update({ points_available: (profile?.points_available ?? 0) - cost })
+        .update({ points_available: newAvailable })
         .eq("id", userId);
+
+      // Log spend
+      if (cost > 0) {
+        await supabaseAdmin.from("point_transactions").insert({
+          user_id: userId,
+          amount: -cost,
+          reason: `Equipped accessory: ${accessoryId}`,
+        });
+      }
 
       updatedAccessories = [
         ...currentAccessories,
@@ -159,51 +204,22 @@ router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Re
       .update({ accessories: updatedAccessories })
       .eq("user_id", userId);
 
-    res.json({ success: true, data: { accessories: updatedAccessories } });
+    res.json({
+      success: true,
+      data: {
+        accessories: updatedAccessories,
+        ...(newAvailable !== undefined ? { pointsAvailable: newAvailable } : {}),
+      },
+    });
   } catch {
     res.status(500).json({ success: false, error: "Failed to update accessories." });
   }
 });
 
-router.post("/feed", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { foodId, cost, evolutionPoints } = req.body as {
-    foodId?: string;
-    cost?: number;
-    evolutionPoints?: number;
-  };
-  const userId = req.userId!;
-
-  if (!foodId || !cost || !evolutionPoints) {
-    res.status(400).json({ success: false, error: "foodId, cost, and evolutionPoints are required." });
-    return;
-  }
-
-  try {
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("points_available")
-      .eq("id", userId)
-      .single();
-
-    if ((profile?.points_available ?? 0) < cost) {
-      res.status(400).json({ success: false, error: "Not enough points." });
-      return;
-    }
-
-    await supabaseAdmin
-      .from("profiles")
-      .update({ points_available: (profile?.points_available ?? 0) - cost })
-      .eq("id", userId);
-
-    const { awardPoints } = await import("../services/pointsService");
-    const result = await awardPoints(userId, evolutionPoints, `Fed goose: ${foodId}`);
-
-    res.json({ success: true, data: result });
-  } catch {
-    res.status(500).json({ success: false, error: "Failed to feed goose." });
-  }
-});
-
+/**
+ * Award points from a game reward (flock party games etc).
+ * Increases both points_total and points_available.
+ */
 router.post("/game-reward", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { points } = req.body as { points?: number };
   const userId = req.userId!;
