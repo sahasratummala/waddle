@@ -1,8 +1,0 @@
-{
-  "build": {
-    "buildCommand": "npm install"
-  },
-  "deploy": {
-    "startCommand": "cd server && npx ts-node src/index.ts"
-  }
-}
