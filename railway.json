@@ -1,8 +1,8 @@
 {
   "build": {
-    "buildCommand": "npm install"
+    "buildCommand": "npm install && cd server && npx tsc"
   },
   "deploy": {
-    "startCommand": "npm run build --workspace=server && node server/dist/index.js"
+    "startCommand": "node server/dist/index.js"
   }
 }
