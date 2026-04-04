@@ -90,7 +90,7 @@ function startTimer(
         startTimer(io, roomCode, studyConfig, sessionNumber, breakPhase);
       } else {
         // Break finished → next study session
-        const nextSession = state.phase !== "STUDY" ? sessionNumber + 1 : sessionNumber;
+        const nextSession = sessionNumber + 1;        
         await updateRoomStatus(roomCode, RoomStatus.STUDYING);
         startTimer(io, roomCode, studyConfig, nextSession, "STUDY");
       }
