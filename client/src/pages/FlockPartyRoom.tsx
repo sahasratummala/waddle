@@ -50,16 +50,6 @@ export default function FlockPartyRoom() {
     }
   }, [room, roomCode, joinRoom, navigate]);
 
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-    socket.on("game:started", ({ game }) => {
-      console.log("Game starting for everyone:", game);
-      useFlockStore.setState({ currentGame: game as any });
-    });
-    return () => { socket.off("game:started"); };
-  }, []);
-
   function handleCopyCode() {
     if (roomCode) {
       navigator.clipboard.writeText(roomCode);
@@ -92,8 +82,7 @@ export default function FlockPartyRoom() {
           isHost={isHost}
           onLaunchGame={(gameId) => {
             if (socket && roomCode) {
-              socket.emit("game:start", { roomCode, game: gameId });
-              useFlockStore.setState({ currentGame: gameId as any });
+              socket.emit("game-start", { roomCode, gameType: gameId });
             }
           }}
         />

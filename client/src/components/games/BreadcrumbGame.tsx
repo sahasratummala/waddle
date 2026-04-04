@@ -102,7 +102,7 @@ export default function BreadcrumbGame({
     setPlayers(sorted);
 
     const isWinner = sorted[0]?.userId === userId;
-    const pts = finalTaps + (isWinner && sorted.length > 1 ? 25 : 0);
+    const pts = Math.round(finalTaps * 0.1) + (isWinner && sorted.length > 1 ? 25 : 0);
     setPointsAwarded(pts);
     setPhase("results");
     await awardPoints(pts);
@@ -121,8 +121,9 @@ export default function BreadcrumbGame({
       setTimeout(() => {
         setPointsAwarded((prev) => {
           if (prev === null) {
-            awardPoints(tapRef.current);
-            return tapRef.current;
+            const fallbackPts = Math.round(tapRef.current * 0.1);
+            awardPoints(fallbackPts);
+            return fallbackPts;
           }
           return prev;
         });
