@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Copy, Check, LogOut, Play } from "lucide-react";
 import { useFlockStore } from "@/store/flockStore";
