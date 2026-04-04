@@ -171,7 +171,6 @@ export default function Shop() {
                       style={{ width: `${progress.percentage}%`, background: "linear-gradient(90deg, #898433, #7E9DA2)" }}
                     />
                   </div>
-                  <p className="text-xs text-forest/35 font-medium mt-1">{progress.current}/{progress.needed} pts</p>
                 </div>
               )}
 
@@ -218,7 +217,7 @@ export default function Shop() {
                 Accessories
                 {!isFullGoose && (
                   <span className="text-xs bg-ocean/15 text-ocean px-2 py-0.5 rounded-full font-bold">
-                    Goose stage
+                    Goose+
                   </span>
                 )}
               </button>
@@ -236,8 +235,7 @@ export default function Shop() {
                   return (
                     <div
                       key={food.id}
-                      className={`relative card p-4 flex flex-col items-center gap-3 transition-all ${locked ? "opacity-50" : "hover:shadow-card-hover"
-                        }`}
+                      className={`relative card p-4 flex flex-col items-center gap-2.5 transition-all ${locked ? "opacity-50" : "hover:shadow-card-hover"}`}
                     >
                       {locked && <Lock className="absolute top-3 right-3 w-3.5 h-3.5 text-forest/30" />}
                       {feedback && (
@@ -246,7 +244,7 @@ export default function Shop() {
                         </div>
                       )}
 
-                      <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-2">
+                      <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-3">
                         {food.imageUrl
                           ? <img src={food.imageUrl} alt={food.name} className="w-full h-full object-contain" />
                           : <span className="text-3xl">🍞</span>
@@ -254,26 +252,34 @@ export default function Shop() {
                       </div>
 
                       <p className="font-display font-black text-forest text-sm text-center">{food.name}</p>
-                      <p className="text-ocean text-xs font-bold">+{food.evolutionPoints} evolution pts</p>
 
                       {locked ? (
-                        <span className="text-xs text-forest/35 font-semibold">Unlocks at {STAGE_NAMES[food.unlockedAtStage]}</span>
+                        <span className="text-xs text-forest/50 font-semibold">Unlocks at {STAGE_NAMES[food.unlockedAtStage]}</span>
                       ) : (
-                        <div className="flex items-center justify-between w-full">
-                          <span className="flex items-center gap-1 text-avocado text-sm font-black">
-                            <Zap className="w-3.5 h-3.5" />{food.cost}
+                        <>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-ocean/10 border border-ocean/20 text-ocean text-xs font-bold">
+                            +{food.evolutionPoints} Evolution
                           </span>
-                          <Button
-                            variant={affordable ? "primary" : "ghost"}
-                            size="sm"
-                            className="text-xs py-1 px-3 rounded-xl font-bold"
-                            disabled={!affordable || purchasing}
-                            isLoading={purchasing}
-                            onClick={() => handleBuyFood(food)}
-                          >
-                            {affordable ? "Feed" : "Need pts"}
-                          </Button>
-                        </div>
+                          <div className="flex items-center justify-between w-full mt-0.5">
+                            <span className="flex items-center gap-1 text-avocado text-sm font-black">
+                              <Zap className="w-3.5 h-3.5" />{food.cost}
+                            </span>
+                            {affordable ? (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                className="text-xs py-1 px-3 rounded-xl font-bold"
+                                disabled={purchasing}
+                                isLoading={purchasing}
+                                onClick={() => handleBuyFood(food)}
+                              >
+                                Feed
+                              </Button>
+                            ) : (
+                              <span className="text-sm font-black text-forest/50">Not enough pts</span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   );
@@ -308,12 +314,11 @@ export default function Shop() {
                     return (
                       <div
                         key={accessory.id}
-                        className={`relative card p-4 flex flex-col items-center gap-3 transition-all hover:shadow-card-hover ${equipped ? "ring-2 ring-ocean" : ""
-                          }`}
+                        className={`relative card p-4 flex flex-col items-center gap-2.5 transition-all hover:shadow-card-hover ${equipped ? "ring-2 ring-ocean" : ""}`}
                       >
                         {equipped && <Check className="absolute top-3 right-3 w-4 h-4 text-ocean" />}
 
-                        <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-2">
+                        <div className="w-full aspect-square rounded-xl bg-cream flex items-center justify-center overflow-hidden p-3">
                           {accessory.imageUrl
                             ? <img src={accessory.imageUrl} alt={accessory.name} className="w-full h-full object-contain" />
                             : <span className="text-3xl">✨</span>
@@ -328,17 +333,19 @@ export default function Shop() {
                           </span>
                           {equipped ? (
                             <span className="text-xs text-ocean font-bold">Equipped</span>
-                          ) : (
+                          ) : affordable ? (
                             <Button
-                              variant={affordable ? "primary" : "ghost"}
+                              variant="primary"
                               size="sm"
                               className="text-xs py-1 px-3 rounded-xl font-bold"
-                              disabled={!affordable || purchasing}
+                              disabled={purchasing}
                               isLoading={purchasing}
                               onClick={() => handleEquip(accessory)}
                             >
-                              {affordable ? "Equip" : "Need pts"}
+                              Equip
                             </Button>
+                          ) : (
+                            <span className="text-sm font-black text-forest/50">Not enough pts</span>
                           )}
                         </div>
                       </div>
