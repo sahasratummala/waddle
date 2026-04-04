@@ -133,6 +133,7 @@ export interface StudyConfig {
   style: StudyStyle;
   studyDurationMinutes: number;
   breakDurationMinutes: number;
+  totalCycles?: number;             // How many study rounds to complete
   longBreakDurationMinutes?: number;
   sessionsBeforeLongBreak?: number; // Pomodoro-specific
   minimumSessionMinutes?: number;   // Flowmodoro-specific

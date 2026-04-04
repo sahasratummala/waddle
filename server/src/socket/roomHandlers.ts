@@ -68,10 +68,23 @@ function startTimer(
             await awardPoints(
               participant.userId,
               sessionPoints,
-              `Study session completed in flock ${roomCode}`
+              `Study session ${sessionNumber} completed in flock ${roomCode}`
             );
             await addParticipantPoints(room.id, participant.userId, sessionPoints);
           }
+        }
+
+        const totalCycles = studyConfig.totalCycles ?? Infinity;
+
+        if (sessionNumber >= totalCycles) {
+          // All cycles done — end the session
+          await updateRoomStatus(roomCode, RoomStatus.ENDED);
+          roomTimerStates.delete(roomCode);
+          io.to(roomCode).emit("study-complete", {
+            totalSessions: sessionNumber,
+            pointsPerSession: Math.floor(studyConfig.studyDurationMinutes * 1.5),
+          });
+          return;
         }
 
         // Decide: long break or regular break
@@ -81,17 +94,33 @@ function startTimer(
         const breakPhase = isLongBreak ? "LONG_BREAK" : "BREAK";
 
         await updateRoomStatus(roomCode, RoomStatus.BREAK);
-        io.to(roomCode).emit("break-start", {
-          ...state,
+
+        const breakSeconds = isLongBreak
+          ? (studyConfig.longBreakDurationMinutes ?? studyConfig.breakDurationMinutes) * 60
+          : studyConfig.breakDurationMinutes * 60;
+
+        const breakTimerState: TimerState = {
           phase: breakPhase,
-          secondsRemaining: 0,
+          secondsRemaining: breakSeconds,
+          sessionNumber,
+          isRunning: true,
+          startedAt: new Date().toISOString(),
+        };
+
+        io.to(roomCode).emit("break-start", breakTimerState);
+        // Signal clients to open the Game Hub
+        io.to(roomCode).emit("game-hub-open", {
+          breakDurationSeconds: breakSeconds,
+          sessionNumber,
+          totalCycles: studyConfig.totalCycles,
         });
 
         startTimer(io, roomCode, studyConfig, sessionNumber, breakPhase);
       } else {
         // Break finished → next study session
-        const nextSession = state.phase !== "STUDY" ? sessionNumber + 1 : sessionNumber;
+        const nextSession = sessionNumber + 1;
         await updateRoomStatus(roomCode, RoomStatus.STUDYING);
+        io.to(roomCode).emit("game-hub-close");
         startTimer(io, roomCode, studyConfig, nextSession, "STUDY");
       }
 
@@ -177,7 +206,7 @@ export function registerRoomHandlers(io: Server, socket: Socket) {
     }
   );
 
-  // study-complete (host manually ends)
+  // study-complete (host manually ends early)
   socket.on("study-complete", async (payload: { roomCode: string }) => {
     const roomCode = payload.roomCode?.toUpperCase();
     if (!roomCode) return;
@@ -189,7 +218,10 @@ export function registerRoomHandlers(io: Server, socket: Socket) {
     roomTimerStates.delete(roomCode);
     await updateRoomStatus(roomCode, RoomStatus.ENDED);
 
-    io.to(roomCode).emit("study-complete");
+    io.to(roomCode).emit("study-complete", {
+      totalSessions: roomTimerStates.get(roomCode)?.sessionNumber ?? 1,
+      pointsPerSession: 0,
+    });
   });
 
   // sync-state request
@@ -234,7 +266,6 @@ export function registerRoomHandlers(io: Server, socket: Socket) {
 
   // Cleanup on disconnect
   socket.on("disconnect", () => {
-    // Leave all rooms this socket was in
     socket.rooms.forEach((room) => {
       if (room !== socket.id && userId) {
         io.to(room).emit("participant-left", userId);

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Plus, Hash, AlertCircle, Clock } from "lucide-react";
+import { Users, Plus, Hash, AlertCircle, Clock, RotateCcw } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card, { CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { useFlockStore } from "@/store/flockStore";
@@ -13,6 +13,7 @@ const STUDY_STYLES = [
     label: "Pomodoro",
     desc: "25 min work / 5 min break",
     icon: "🍅",
+    defaultCycles: 4,
     config: {
       style: StudyStyle.POMODORO,
       studyDurationMinutes: 25,
@@ -24,31 +25,33 @@ const STUDY_STYLES = [
   {
     style: StudyStyle.FLOWMODORO,
     label: "Flowmodoro",
-    desc: "Study until natural stop, break = 1/5 of study time",
+    desc: "60 min work / 12 min break",
     icon: "🌊",
+    defaultCycles: 3,
     config: {
       style: StudyStyle.FLOWMODORO,
-      studyDurationMinutes: 90,
-      breakDurationMinutes: 18,
-      minimumSessionMinutes: 15,
+      studyDurationMinutes: 60,
+      breakDurationMinutes: 12,
     },
   },
   {
     style: StudyStyle.TIME_BLOCKING,
     label: "Time Blocking",
-    desc: "Structured time blocks with defined tasks",
+    desc: "2 hr work / 1 hr break",
     icon: "📅",
+    defaultCycles: 2,
     config: {
       style: StudyStyle.TIME_BLOCKING,
-      studyDurationMinutes: 60,
-      breakDurationMinutes: 10,
+      studyDurationMinutes: 120,
+      breakDurationMinutes: 60,
     },
   },
   {
     style: StudyStyle.CUSTOM,
     label: "Custom",
-    desc: "Set your own study and break durations",
+    desc: "Set your own durations & rounds",
     icon: "⚙️",
+    defaultCycles: 3,
     config: {
       style: StudyStyle.CUSTOM,
       studyDurationMinutes: 45,
@@ -64,24 +67,37 @@ export default function FlockParty() {
   const [tab, setTab] = useState<"create" | "join">("create");
   const [joinCode, setJoinCode] = useState("");
   const [selectedStyle, setSelectedStyle] = useState(StudyStyle.POMODORO);
+  const [cycles, setCycles] = useState(4);
   const [customStudy, setCustomStudy] = useState(45);
   const [customBreak, setCustomBreak] = useState(10);
   const [localError, setLocalError] = useState("");
 
+  function handleStyleSelect(style: StudyStyle) {
+    setSelectedStyle(style);
+    const preset = STUDY_STYLES.find((s) => s.style === style);
+    if (preset) setCycles(preset.defaultCycles);
+  }
+
   function getStudyConfig(): StudyConfig {
-    const preset = STUDY_STYLES.find((s) => s.style === selectedStyle);
-    if (selectedStyle === StudyStyle.CUSTOM) {
-      return {
-        style: StudyStyle.CUSTOM,
-        studyDurationMinutes: customStudy,
-        breakDurationMinutes: customBreak,
-      };
-    }
-    return preset!.config;
+    const preset = STUDY_STYLES.find((s) => s.style === selectedStyle)!;
+    const base =
+      selectedStyle === StudyStyle.CUSTOM
+        ? {
+            style: StudyStyle.CUSTOM,
+            studyDurationMinutes: customStudy,
+            breakDurationMinutes: customBreak,
+          }
+        : { ...preset.config };
+
+    return { ...base, totalCycles: cycles };
   }
 
   async function handleCreate() {
     setLocalError("");
+    if (cycles < 1 || cycles > 20) {
+      setLocalError("Rounds must be between 1 and 20.");
+      return;
+    }
     try {
       const code = await createRoom(getStudyConfig());
       navigate(`/flock-party/${code}`);
@@ -106,6 +122,7 @@ export default function FlockParty() {
   }
 
   const displayError = localError || error;
+  const selectedPreset = STUDY_STYLES.find((s) => s.style === selectedStyle)!;
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl animate-in">
@@ -158,11 +175,12 @@ export default function FlockParty() {
             <Clock className="w-5 h-5 text-white/40" />
           </CardHeader>
           <CardContent>
+            {/* Style grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
               {STUDY_STYLES.map(({ style, label, desc, icon }) => (
                 <button
                   key={style}
-                  onClick={() => setSelectedStyle(style)}
+                  onClick={() => handleStyleSelect(style)}
                   className={`text-left p-4 rounded-xl border transition-all ${
                     selectedStyle === style
                       ? "border-primary/60 bg-primary/10"
@@ -178,6 +196,7 @@ export default function FlockParty() {
               ))}
             </div>
 
+            {/* Custom durations */}
             {selectedStyle === StudyStyle.CUSTOM && (
               <div className="grid grid-cols-2 gap-4 mb-5 p-4 bg-background-surface rounded-xl border border-white/10">
                 <div>
@@ -204,6 +223,42 @@ export default function FlockParty() {
                 </div>
               </div>
             )}
+
+            {/* Rounds/cycles input — all styles */}
+            <div className="flex items-center gap-4 p-4 bg-background-surface rounded-xl border border-white/10 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-secondary/15 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-4 h-4 text-secondary" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-white mb-0.5">
+                  Number of rounds
+                </label>
+                <p className="text-white/40 text-xs">
+                  How many{" "}
+                  {selectedPreset.config.studyDurationMinutes >= 60
+                    ? `${selectedPreset.config.studyDurationMinutes / 60}h`
+                    : `${selectedPreset.config.studyDurationMinutes}m`}{" "}
+                  study blocks to do
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCycles((c) => Math.max(1, c - 1))}
+                  className="w-8 h-8 rounded-lg bg-white/8 hover:bg-white/15 text-white font-bold transition-colors"
+                >
+                  −
+                </button>
+                <span className="text-white font-display font-bold text-lg w-6 text-center tabular-nums">
+                  {cycles}
+                </span>
+                <button
+                  onClick={() => setCycles((c) => Math.min(20, c + 1))}
+                  className="w-8 h-8 rounded-lg bg-white/8 hover:bg-white/15 text-white font-bold transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
 
             <Button
               variant="secondary"

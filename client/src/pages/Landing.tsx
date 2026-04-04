@@ -12,6 +12,7 @@ const FEATURES = [
       "Describe your day and let Claude generate a structured task list with point values — including self-care reminders.",
     color: "text-primary",
     bg: "bg-primary/10",
+    to: "/register",
   },
   {
     icon: Users,
@@ -20,6 +21,7 @@ const FEATURES = [
       "Study alongside friends in real-time rooms with shared Pomodoro timers, leaderboards, and mini-games on breaks.",
     color: "text-secondary",
     bg: "bg-secondary/10",
+    to: "/register",
   },
   {
     icon: Sparkles,
@@ -28,6 +30,7 @@ const FEATURES = [
       "Complete tasks and study sessions to earn points, evolve your goose from egg to full goose, and unlock accessories.",
     color: "text-accent",
     bg: "bg-accent/10",
+    to: "/register",
   },
 ];
 
@@ -112,17 +115,18 @@ export default function Landing() {
       {/* Features */}
       <section className="relative z-10 px-6 pb-24 max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {FEATURES.map(({ icon: Icon, title, description, color, bg }) => (
-            <div
+          {FEATURES.map(({ icon: Icon, title, description, color, bg, to }) => (
+            <Link
               key={title}
-              className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-white/20 hover:-translate-y-1 transition-all duration-200"
+              to={to}
+              className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-white/20 hover:-translate-y-1 transition-all duration-200 block"
             >
               <div className={`inline-flex p-3 rounded-xl ${bg} mb-4`}>
                 <Icon className={`w-6 h-6 ${color}`} />
               </div>
               <h3 className="text-lg font-display font-bold text-white mb-2">{title}</h3>
               <p className="text-white/55 text-sm leading-relaxed">{description}</p>
-            </div>
+            </Link>
           ))}
         </div>
       </section>

@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../lib/supabase";
 import type { FlockParty, StudyConfig, Participant } from "@waddle/shared";
 import { RoomStatus, StudyStyle, GooseStage } from "@waddle/shared";
@@ -188,8 +187,8 @@ export async function getRoomByCode(code: string): Promise<FlockParty | null> {
   };
 }
 
-export async function updateRoomStatus(roomId: string, status: RoomStatus): Promise<void> {
-  await supabaseAdmin.from("rooms").update({ status }).eq("id", roomId);
+export async function updateRoomStatus(roomCode: string, status: RoomStatus): Promise<void> {
+  await supabaseAdmin.from("rooms").update({ status }).eq("code", roomCode);
 }
 
 export async function addParticipantPoints(
