@@ -115,8 +115,9 @@ router.post("/feed", requireAuth, async (req: AuthenticatedRequest, res: Respons
 
 /**
  * Equip or unequip an accessory.
- * Equipping deducts points_available (points_total stays the same).
- * Accessories are immediately reflected on the goose.
+ * If not owned, it deducts points and adds to owned_accessories.
+ * If owned, it equips for free.
+ * Unequipping is free and keeps it in owned_accessories.
  */
 router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { accessoryId, action } = req.body as {
@@ -144,8 +145,10 @@ router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Re
 
     const currentAccessories: Array<{ accessoryId: string; equippedAt: string }> =
       goose.accessories ?? [];
+    const ownedAccessories: string[] = goose.owned_accessories ?? [];
 
-    let updatedAccessories: typeof currentAccessories;
+    let updatedAccessories: typeof currentAccessories = currentAccessories;
+    let updatedOwned: string[] = ownedAccessories;
     let newAvailable: number | undefined;
 
     if (action === "equip") {
@@ -154,64 +157,80 @@ router.post("/accessory", requireAuth, async (req: AuthenticatedRequest, res: Re
         return;
       }
 
-      // Look up cost from static list (fallback 0 if not in DB)
-      const { data: accessory } = await supabaseAdmin
-        .from("accessories")
-        .select("cost")
-        .eq("id", accessoryId)
-        .single();
+      const isOwned = ownedAccessories.includes(accessoryId);
 
-      const cost = accessory?.cost ?? 0;
+      // If they don't own it yet, charge them points
+      if (!isOwned) {
+        // Look up cost from static list (fallback 0 if not in DB)
+        const { data: accessory } = await supabaseAdmin
+          .from("accessories")
+          .select("cost")
+          .eq("id", accessoryId)
+          .single();
 
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("points_available")
-        .eq("id", userId)
-        .single();
+        const cost = accessory?.cost ?? 0;
 
-      if ((profile?.points_available ?? 0) < cost) {
-        res.status(400).json({ success: false, error: "Not enough points." });
-        return;
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("points_available")
+          .eq("id", userId)
+          .single();
+
+        if ((profile?.points_available ?? 0) < cost) {
+          res.status(400).json({ success: false, error: "Not enough points." });
+          return;
+        }
+
+        newAvailable = (profile?.points_available ?? 0) - cost;
+
+        // Deduct points_available only — points_total unchanged
+        await supabaseAdmin
+          .from("profiles")
+          .update({ points_available: newAvailable })
+          .eq("id", userId);
+
+        // Log spend
+        if (cost > 0) {
+          await supabaseAdmin.from("point_transactions").insert({
+            user_id: userId,
+            amount: -cost,
+            reason: `Purchased accessory: ${accessoryId}`,
+          });
+        }
+
+        // Add to their permanent inventory
+        updatedOwned = [...ownedAccessories, accessoryId];
       }
 
-      newAvailable = (profile?.points_available ?? 0) - cost;
-
-      // Deduct points_available only — points_total unchanged
-      await supabaseAdmin
-        .from("profiles")
-        .update({ points_available: newAvailable })
-        .eq("id", userId);
-
-      // Log spend
-      if (cost > 0) {
-        await supabaseAdmin.from("point_transactions").insert({
-          user_id: userId,
-          amount: -cost,
-          reason: `Equipped accessory: ${accessoryId}`,
-        });
-      }
-
+      // Equip the item
       updatedAccessories = [
         ...currentAccessories,
         { accessoryId, equippedAt: new Date().toISOString() },
       ];
     } else {
+      // UNEQUIP - simply remove from the equipped array, keep in owned
       updatedAccessories = currentAccessories.filter((a) => a.accessoryId !== accessoryId);
     }
 
+    // Save both arrays back to the database
     await supabaseAdmin
       .from("geese")
-      .update({ accessories: updatedAccessories })
+      .update({
+        accessories: updatedAccessories,
+        owned_accessories: updatedOwned
+      })
       .eq("user_id", userId);
 
     res.json({
       success: true,
       data: {
         accessories: updatedAccessories,
+        ownedAccessories: updatedOwned,
         ...(newAvailable !== undefined ? { pointsAvailable: newAvailable } : {}),
       },
     });
-  } catch {
+  } catch (err) {
+    console.error("[goose/accessory]", err);
     res.status(500).json({ success: false, error: "Failed to update accessories." });
   }
 });

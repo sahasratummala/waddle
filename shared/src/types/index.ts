@@ -77,6 +77,7 @@ export interface Goose {
   id: string;
   userId: string;
   stage: GooseStage;
+  ownedAccessories: string[];
   accessories: EquippedAccessory[];
   createdAt: string;
 }

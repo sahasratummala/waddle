@@ -20,15 +20,34 @@ interface GooseState {
 
 async function buildEquippedAccessories(raw: { accessoryId: string; equippedAt: string }[]): Promise<EquippedAccessory[]> {
   if (!raw.length) return [];
+
   const { data } = await supabase
     .from("accessories")
     .select("*")
     .in("id", raw.map((a) => a.accessoryId));
-  const accessoryMap = new Map((data ?? []).map((a) => [a.id, a]));
-  return raw.map((ea) => ({
+
+  // Explicitly tell TS this is a Map of strings to Accessories
+  const accessoryMap = new Map<string, Accessory>(
+    (data ?? []).map((a) => [
+      a.id,
+      {
+        id: a.id,
+        name: a.name,
+        description: a.description,
+        cost: a.cost,
+        category: a.category,
+        unlockedAtStage: a.unlocked_at_stage,
+        imageUrl: a.image_url
+      } as Accessory
+    ])
+  );
+
+  // Tell TS this specifically returns an EquippedAccessory
+  return raw.map((ea): EquippedAccessory => ({
     accessoryId: ea.accessoryId,
     equippedAt: ea.equippedAt,
-    accessory: accessoryMap.get(ea.accessoryId),
+    // Add the "as Accessory" right here so TS stops worrying about undefined
+    accessory: accessoryMap.get(ea.accessoryId) as Accessory,
   }));
 }
 
@@ -61,6 +80,7 @@ export const useGooseStore = create<GooseState>((set, get) => ({
         userId: data.user_id,
         stage: data.stage as GooseStage,
         accessories,
+        ownedAccessories: data.owned_accessories ?? [], // <--- ADDED THIS LINE
         evolutionPoints: data.evolution_points ?? 0,
         createdAt: data.created_at,
       };
@@ -100,8 +120,12 @@ export const useGooseStore = create<GooseState>((set, get) => ({
       const { data } = await res.json();
       const rawAccessories = (data.accessories as { accessoryId: string; equippedAt: string }[]) ?? [];
       const accessories = await buildEquippedAccessories(rawAccessories);
+
+      // Pulling ownedAccessories from the API response so the UI updates instantly
+      const ownedAccessories = data.ownedAccessories ?? get().goose?.ownedAccessories ?? [];
+
       set((state) => ({
-        goose: state.goose ? { ...state.goose, accessories } : null,
+        goose: state.goose ? { ...state.goose, accessories, ownedAccessories } : null,
       }));
     }
   },
@@ -124,8 +148,12 @@ export const useGooseStore = create<GooseState>((set, get) => ({
       const { data } = await res.json();
       const rawAccessories = (data.accessories as { accessoryId: string; equippedAt: string }[]) ?? [];
       const accessories = await buildEquippedAccessories(rawAccessories);
+
+      // Pulling ownedAccessories from the API response so the UI updates instantly
+      const ownedAccessories = data.ownedAccessories ?? get().goose?.ownedAccessories ?? [];
+
       set((state) => ({
-        goose: state.goose ? { ...state.goose, accessories } : null,
+        goose: state.goose ? { ...state.goose, accessories, ownedAccessories } : null,
       }));
     }
   },
@@ -171,6 +199,7 @@ export const useGooseStore = create<GooseState>((set, get) => ({
                 ...state.goose,
                 stage: data.stage as GooseStage,
                 accessories,
+                ownedAccessories: data.owned_accessories ?? [], // <--- ADDED THIS LINE
                 evolutionPoints: data.evolution_points ?? 0,
               }
               : null,
