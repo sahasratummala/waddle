@@ -20,56 +20,9 @@ const COLS = 12;
 const ROWS = 12;
 const CELL_SIZE = 36;
 
-function generateMaze(rows: number, cols: number): Cell[][] {
-  const grid: Cell[][] = Array.from({ length: rows }, (_, r) =>
-    Array.from({ length: cols }, (_, c) => ({
-      row: r,
-      col: c,
-      walls: { top: true, right: true, bottom: true, left: true },
-      visited: false,
-    }))
-  );
-
-  const stack: Cell[] = [];
-  const start = grid[0][0];
-  start.visited = true;
-  stack.push(start);
-
-  while (stack.length > 0) {
-    const current = stack[stack.length - 1];
-    const neighbors: { cell: Cell; dir: string }[] = [];
-    const { row, col } = current;
-
-    if (row > 0 && !grid[row - 1][col].visited)
-      neighbors.push({ cell: grid[row - 1][col], dir: "top" });
-    if (col < cols - 1 && !grid[row][col + 1].visited)
-      neighbors.push({ cell: grid[row][col + 1], dir: "right" });
-    if (row < rows - 1 && !grid[row + 1][col].visited)
-      neighbors.push({ cell: grid[row + 1][col], dir: "bottom" });
-    if (col > 0 && !grid[row][col - 1].visited)
-      neighbors.push({ cell: grid[row][col - 1], dir: "left" });
-
-    if (neighbors.length === 0) {
-      stack.pop();
-    } else {
-      const { cell: next, dir } = neighbors[Math.floor(Math.random() * neighbors.length)];
-      if (dir === "top") { current.walls.top = false; next.walls.bottom = false; }
-      if (dir === "right") { current.walls.right = false; next.walls.left = false; }
-      if (dir === "bottom") { current.walls.bottom = false; next.walls.top = false; }
-      if (dir === "left") { current.walls.left = false; next.walls.right = false; }
-      next.visited = true;
-      stack.push(next);
-    }
-  }
-
-  return grid;
-}
-
 type MazeSeed = number;
 
 function seededMaze(seed: MazeSeed) {
-  // Deterministic maze using seed — same seed = same maze for all players
-  // We encode seed into a stable grid by using it to shuffle directions
   let s = seed;
   const rand = () => {
     s = (s * 1664525 + 1013904223) & 0xffffffff;
@@ -129,9 +82,11 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
   const [seed] = useState(() => Math.floor(Math.random() * 100000));
   const posRef = useRef({ row: 0, col: 0 });
 
-  // On mount, broadcast seed to sync maze across all players
   useEffect(() => {
-    socket.emit("maze:sync_seed", { roomCode, seed });
+    if (roomCode === "SOLO_GAME") {
+      setMaze(seededMaze(seed));
+      return;
+    }
 
     socket.on("maze:seed", (incomingSeed: number) => {
       setMaze(seededMaze(incomingSeed));
@@ -141,6 +96,8 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       setWinner({ id: data.userId, name: data.username });
       onGameEnd(data.userId, data.username);
     });
+
+    socket.emit("maze:sync_seed", { roomCode, seed });
 
     return () => {
       socket.off("maze:seed");
@@ -164,14 +121,12 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw finish
     ctx.fillStyle = "#5DCAA5";
     ctx.fillRect(
       (COLS - 1) * CELL_SIZE + 1, (ROWS - 1) * CELL_SIZE + 1,
       CELL_SIZE - 1, CELL_SIZE - 1
     );
 
-    // Draw walls
     ctx.strokeStyle = "#444";
     ctx.lineWidth = 2;
     for (let r = 0; r < ROWS; r++) {
@@ -189,7 +144,6 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       }
     }
 
-    // Draw user path
     if (path.length > 1) {
       ctx.strokeStyle = "#7F77DD";
       ctx.lineWidth = 4;
@@ -201,7 +155,6 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       ctx.stroke();
     }
 
-    // Draw player goose emoji placeholder
     const { row, col } = posRef.current;
     ctx.fillStyle = "#7F77DD";
     ctx.beginPath();
@@ -258,9 +211,12 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
       setPlayerPos({ ...cell });
       setPath((prev) => [...prev, { x, y }]);
 
-      // Check win condition
       if (cell.row === ROWS - 1 && cell.col === COLS - 1) {
-        socket.emit("maze:solved", { roomCode, userId, username });
+        if (roomCode !== "SOLO_GAME") {
+          socket.emit("maze:solved", { roomCode, userId, username });
+        }
+        setWinner({ id: userId, name: username });
+        onGameEnd(userId, username);
         setDrawing(false);
       }
     }
@@ -271,7 +227,7 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
   if (!maze) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500 text-lg animate-pulse">Loading maze…</p>
+        <p className="text-gray-500 text-lg animate-pulse">Loading maze...</p>
       </div>
     );
   }
@@ -279,13 +235,12 @@ export default function MazeGame({ socket, roomCode, userId, username, onGameEnd
   return (
     <div className="flex flex-col items-center gap-4">
       <p className="text-sm text-gray-500">
-        Draw a path from the <span className="font-semibold text-purple-600">top-left</span> to the{" "}
-        <span className="font-semibold text-teal-500">bottom-right</span>. First to finish wins!
+        Draw a path from the top-left to the bottom-right. First to finish wins!
       </p>
 
       {winner && (
         <div className="bg-yellow-100 border border-yellow-300 rounded-xl px-6 py-3 text-yellow-800 font-semibold text-lg">
-          🏆 {winner.name} solved the maze first!
+          {winner.name} solved the maze first!
         </div>
       )}
 
