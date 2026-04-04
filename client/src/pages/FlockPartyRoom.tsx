@@ -18,11 +18,6 @@ import MazeGame from "../components/games/MazeGame";
 import BreadcrumbGame from "../components/games/BreadcrumbGame";
 import PictionaryGame from "../components/games/PictionaryGame";
 
-interface CompletionData {
-  totalSessions: number;
-  pointsPerSession: number;
-}
-
 const STYLE_LABELS: Record<StudyStyle, string> = {
   [StudyStyle.POMODORO]: "Pomodoro",
   [StudyStyle.FLOWMODORO]: "Flowmodoro",
@@ -38,11 +33,10 @@ export default function FlockPartyRoom() {
   const {
     room, timerState, messages, joinRoom,
     leaveRoom, startStudy, sendMessage,
-    currentGame, launchGame
+    currentGame, launchGame, completionData,
   } = useFlockStore();
 
   const [codeCopied, setCodeCopied] = useState(false);
-  const [completionData, setCompletionData] = useState<CompletionData | null>(null);
 
   useEffect(() => {
     if (!room && roomCode) {
@@ -90,8 +84,21 @@ export default function FlockPartyRoom() {
     }
     if (!socket || !user || !roomCode) return <div className="text-forest/50 text-sm">Loading...</div>;
     const gameProps = { socket, roomCode, userId: user.id, username: user.username || "Goose" };
+    const handlePointsEarned = (points: number) => {
+      useFlockStore.setState((state) => {
+        if (!state.room) return {};
+        return {
+          room: {
+            ...state.room,
+            participants: state.room.participants.map((p) =>
+              p.userId === user.id ? { ...p, pointsEarned: (p.pointsEarned ?? 0) + points } : p
+            ),
+          },
+        };
+      });
+    };
     if (currentGame === "MAZE") return <MazeGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
-    if (currentGame === "BREADCRUMB") return <BreadcrumbGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
+    if (currentGame === "BREADCRUMB") return <BreadcrumbGame {...gameProps} onPointsEarned={handlePointsEarned} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
     if (currentGame === "PICTIONARY") return <PictionaryGame {...gameProps} onGameEnd={() => useFlockStore.setState({ currentGame: null })} />;
     return null;
   };
@@ -192,10 +199,11 @@ export default function FlockPartyRoom() {
           </div>
         )}
 
-        {isEnded && completionData && (
+        {isEnded && (
           <CompletionScreen
-            completionData={completionData}
+            completionData={completionData ?? { totalSessions: 1, pointsPerSession: 0 }}
             participants={room.participants}
+            currentUserId={user?.id}
             onLeave={handleLeave}
           />
         )}

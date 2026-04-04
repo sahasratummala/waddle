@@ -91,6 +91,10 @@ export default function FlockParty() {
       setLocalError("Rounds must be between 1 and 20.");
       return;
     }
+    if (selectedStyle === StudyStyle.CUSTOM && (customStudy <= 0 || customBreak <= 0)) {
+      setLocalError("Study and break durations must be greater than 0.");
+      return;
+    }
     try {
       const code = await createRoom(getStudyConfig());
       navigate(`/flock-party/${code}`);
@@ -112,7 +116,6 @@ export default function FlockParty() {
   }
 
   const displayError = localError || error;
-  const selectedPreset = STUDY_STYLES.find((s) => s.style === selectedStyle)!;
 
   return (
     <div className="min-h-screen bg-cream">
@@ -180,11 +183,11 @@ export default function FlockParty() {
               <div className="grid grid-cols-2 gap-4 p-4 bg-cream rounded-2xl border-2 border-forest/10">
                 <div>
                   <label className="block text-xs font-bold text-forest/60 mb-1.5">Study (min)</label>
-                  <input type="number" min={5} max={180} value={customStudy} onChange={(e) => setCustomStudy(Number(e.target.value))} className="input-base text-sm" />
+                  <input type="number" min={0.1} max={180} step={0.5} value={customStudy} onChange={(e) => setCustomStudy(Number(e.target.value))} className="input-base text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-forest/60 mb-1.5">Break (min)</label>
-                  <input type="number" min={1} max={60} value={customBreak} onChange={(e) => setCustomBreak(Number(e.target.value))} className="input-base text-sm" />
+                  <input type="number" min={0.1} max={60} step={0.5} value={customBreak} onChange={(e) => setCustomBreak(Number(e.target.value))} className="input-base text-sm" />
                 </div>
               </div>
             )}
@@ -197,11 +200,7 @@ export default function FlockParty() {
               <div className="flex-1">
                 <p className="text-sm font-bold text-forest">Number of rounds</p>
                 <p className="text-forest/40 text-xs font-medium">
-                  How many{" "}
-                  {selectedPreset.config.studyDurationMinutes >= 60
-                    ? `${selectedPreset.config.studyDurationMinutes / 60}h`
-                    : `${selectedPreset.config.studyDurationMinutes}m`}{" "}
-                  study blocks to do
+                  How many study blocks to do
                 </p>
               </div>
               <div className="flex items-center gap-2">

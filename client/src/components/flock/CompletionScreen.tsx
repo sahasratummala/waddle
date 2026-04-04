@@ -11,16 +11,20 @@ interface CompletionData {
 interface CompletionScreenProps {
   completionData: CompletionData;
   participants: Participant[];
+  currentUserId?: string;
   onLeave: () => void;
 }
 
 export default function CompletionScreen({
   completionData,
   participants,
+  currentUserId,
   onLeave,
 }: CompletionScreenProps) {
-  const totalPoints = completionData.totalSessions * completionData.pointsPerSession;
   const sorted = [...participants].sort((a, b) => b.pointsEarned - a.pointsEarned);
+  const myPoints = sorted.find((p) => p.userId === currentUserId)?.pointsEarned
+    ?? sorted[0]?.pointsEarned
+    ?? 0;
 
   return (
     <div className="card p-6 text-center">
@@ -41,7 +45,7 @@ export default function CompletionScreen({
 
       <div className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-avocado/10 border-2 border-avocado/20 mb-5 mx-auto w-fit">
         <Zap className="w-5 h-5 text-avocado" />
-        <span className="text-avocado font-display font-black text-xl">+{totalPoints}</span>
+        <span className="text-avocado font-display font-black text-xl">+{myPoints}</span>
         <span className="text-avocado/70 text-sm font-semibold">pts earned</span>
       </div>
 

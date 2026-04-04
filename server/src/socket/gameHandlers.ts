@@ -211,6 +211,18 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     }
   });
 
+  // game:points-earned — client reports points it awarded itself (e.g. breadcrumb)
+  socket.on("game:points-earned", async (payload: { roomCode: string; points: number }) => {
+    const roomCode = payload.roomCode?.toUpperCase();
+    if (!roomCode || !userId || !payload.points) return;
+    const room = await getRoomByCode(roomCode);
+    if (!room) return;
+    await addParticipantPoints(room.id, userId, payload.points);
+    const participant = room.participants.find((p) => p.userId === userId);
+    const newTotal = (participant?.pointsEarned ?? 0) + payload.points;
+    io.to(roomCode).emit("participant-points", { userId, pointsEarned: newTotal });
+  });
+
   // game-end (host manually ends game)
   socket.on("game-end", async (payload: { roomCode: string }) => {
     const roomCode = payload.roomCode?.toUpperCase();
@@ -242,6 +254,9 @@ async function endGame(io: Server, roomCode: string, session: GameSession) {
 
       await awardPoints(uid, pointsAwarded, `${session.gameType} game in flock ${roomCode}`);
       await addParticipantPoints(room.id, uid, pointsAwarded);
+
+      const newTotal = (participant?.pointsEarned ?? 0) + pointsAwarded;
+      io.to(roomCode).emit("participant-points", { userId: uid, pointsEarned: newTotal });
 
       return {
         userId: uid,

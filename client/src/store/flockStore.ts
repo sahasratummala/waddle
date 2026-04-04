@@ -17,6 +17,7 @@ interface FlockState {
   messages: Message[];
   currentGame: GameType | null;
   gameData: unknown;
+  completionData: { totalSessions: number; pointsPerSession: number } | null;
   isConnected: boolean;
   loading: boolean;
   error: string | null;
@@ -47,6 +48,7 @@ export const useFlockStore = create<FlockState>((set, get) => ({
   messages: [],
   currentGame: null,
   gameData: null,
+  completionData: null,
   isConnected: false,
   loading: false,
   error: null,
@@ -143,6 +145,7 @@ export const useFlockStore = create<FlockState>((set, get) => ({
       messages: [],
       currentGame: null,
       gameData: null,
+      completionData: null,
       isConnected: false,
     });
   },
@@ -232,19 +235,34 @@ export const useFlockStore = create<FlockState>((set, get) => ({
       }));
     });
 
-    socket.on("study-complete", () => {
-      set((state) => ({
-        room: state.room ? { ...state.room, status: RoomStatus.ENDED } : null,
-        timerState: DEFAULT_TIMER,
-      }));
-    });
-
     socket.on("game-start", ({ gameType, gameData }: { gameType: GameType; gameData: unknown }) => {
       set({ currentGame: gameType, gameData });
     });
 
     socket.on("game-end", () => {
       set({ currentGame: null, gameData: null });
+    });
+
+    socket.on("study-complete", (data: { totalSessions: number; pointsPerSession: number }) => {
+      set((state) => ({
+        completionData: data,
+        timerState: DEFAULT_TIMER,
+        room: state.room ? { ...state.room, status: RoomStatus.ENDED } : null,
+      }));
+    });
+
+    socket.on("participant-points", ({ userId, pointsEarned }: { userId: string; pointsEarned: number }) => {
+      set((state) => {
+        if (!state.room) return {};
+        return {
+          room: {
+            ...state.room,
+            participants: state.room.participants.map((p) =>
+              p.userId === userId ? { ...p, pointsEarned } : p
+            ),
+          },
+        };
+      });
     });
 
     socket.on("new-message", (message: Message) => {

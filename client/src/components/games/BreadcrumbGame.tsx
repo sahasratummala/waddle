@@ -8,6 +8,7 @@ interface BreadcrumbGameProps {
   userId: string;
   username: string;
   onGameEnd?: (rankings: { userId: string; username: string; taps: number }[]) => void;
+  onPointsEarned?: (points: number) => void;
   durationMs?: number;
 }
 
@@ -60,6 +61,7 @@ export default function BreadcrumbGame({
   userId,
   username,
   onGameEnd,
+  onPointsEarned,
   durationMs = GAME_DURATION,
 }: BreadcrumbGameProps) {
   const { session, refreshProfile } = useAuthStore();
@@ -79,6 +81,7 @@ export default function BreadcrumbGame({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rippleId = useRef(0);
   const gameEndedRef = useRef(false);
+  const playersRef = useRef<PlayerScore[]>([]);
 
   const awardPoints = useCallback(async (pts: number) => {
     const token = session?.access_token;
@@ -105,32 +108,20 @@ export default function BreadcrumbGame({
     const pts = Math.round(finalTaps * 0.1) + (isWinner && sorted.length > 1 ? 25 : 0);
     setPointsAwarded(pts);
     setPhase("results");
+    if (pts > 0) onPointsEarned?.(pts);
     await awardPoints(pts);
-    onGameEnd?.(sorted);
-  }, [userId, awardPoints, onGameEnd]);
+    if (!isSolo && pts > 0) {
+      socket.emit("game:points-earned", { roomCode, points: pts });
+    }
+  }, [userId, isSolo, socket, roomCode, awardPoints, onPointsEarned]);
 
   const endGame = useCallback(() => {
     if (gameEndedRef.current) return;
-    if (isSolo) {
-      resolveGame(tapRef.current, [{ userId, username, taps: tapRef.current }]);
-    } else {
-      gameEndedRef.current = true;
-      if (timerRef.current) clearInterval(timerRef.current);
-      socket.emit("breadcrumb:final_score", { roomCode, userId, username, taps: tapRef.current });
-      setPhase("results");
-      setTimeout(() => {
-        setPointsAwarded((prev) => {
-          if (prev === null) {
-            const fallbackPts = Math.round(tapRef.current * 0.1);
-            awardPoints(fallbackPts);
-            return fallbackPts;
-          }
-          return prev;
-        });
-        setPlayers((prev) => prev.length ? prev : [{ userId, username, taps: tapRef.current }]);
-      }, 3000);
-    }
-  }, [isSolo, socket, roomCode, userId, username, resolveGame, awardPoints]);
+    // Build the final player list: latest known scores + this player's final tap count
+    const knownPlayers = new Map(playersRef.current.map((p) => [p.userId, p]));
+    knownPlayers.set(userId, { userId, username, taps: tapRef.current });
+    resolveGame(tapRef.current, [...knownPlayers.values()]);
+  }, [userId, username, resolveGame]);
 
   const startTimer = useCallback(() => {
     const endTime = Date.now() + durationMs;
@@ -175,6 +166,9 @@ export default function BreadcrumbGame({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [round]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep playersRef in sync for use in endGame closure
+  useEffect(() => { playersRef.current = players; }, [players]);
 
   // Multiplayer socket listeners
   useEffect(() => {
@@ -424,13 +418,31 @@ export default function BreadcrumbGame({
             ))}
           </div>
 
-          <button
-            onClick={() => setRound((r) => r + 1)}
-            className="mt-1 w-full py-3 rounded-2xl font-display font-black text-white text-sm transition-all active:scale-95"
-            style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
-          >
-            Play Again
-          </button>
+          {isSolo ? (
+            <button
+              onClick={() => setRound((r) => r + 1)}
+              className="mt-1 w-full py-3 rounded-2xl font-display font-black text-white text-sm transition-all active:scale-95"
+              style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
+            >
+              Play Again
+            </button>
+          ) : (
+            <div className="mt-1 flex gap-2">
+              <button
+                onClick={() => setRound((r) => r + 1)}
+                className="flex-1 py-3 rounded-2xl font-display font-black text-forest text-sm border-2 border-forest/15 bg-white transition-all active:scale-95"
+              >
+                Play Again
+              </button>
+              <button
+                onClick={() => onGameEnd?.(players.length ? players : [{ userId, username, taps }])}
+                className="flex-1 py-3 rounded-2xl font-display font-black text-white text-sm transition-all active:scale-95"
+                style={{ background: "linear-gradient(135deg, #898433, #7E9DA2)" }}
+              >
+                Back to Room
+              </button>
+            </div>
+          )}
         </div>
       )}
 
