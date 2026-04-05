@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Gamepad2 } from "lucide-react";
+import { Gamepad2, Compass, Wheat, PenLine } from "lucide-react";
 import { GameType } from "@waddle/shared";
 import { useAuthStore } from "@/store/authStore";
 import { connectSocket, disconnectSocket } from "@/lib/socket";
@@ -11,19 +11,19 @@ const GAMES = [
     {
         type: GameType.MAZE,
         label: "Goose Maze",
-        emoji: "🌀",
+        icon: Compass,
         description: "Navigate your goose through the maze as fast as you can.",
     },
     {
         type: GameType.BREADCRUMB,
         label: "Breadcrumb Tap",
-        emoji: "🍞",
+        icon: Wheat,
         description: "Tap the breadcrumbs faster than everyone else.",
     },
     {
         type: GameType.PICTIONARY,
         label: "Pictionary",
-        emoji: "🎨",
+        icon: PenLine,
         description: "Draw a goose-themed word while Gemini tries to guess it.",
     },
 ];
@@ -53,7 +53,6 @@ export default function Games() {
         }
     }
 
-    // Awards points for solo game completion and refreshes the navbar counter
     async function handlePointsEarned(points: number) {
         if (!session?.access_token) return;
         try {
@@ -84,21 +83,26 @@ export default function Games() {
 
                 {!activeGame && (
                     <div className="flex flex-col gap-4">
-                        {GAMES.map((game) => (
-                            <button
-                                key={game.type}
-                                onClick={() => handleSelectGame(game.type)}
-                                className="flex items-center gap-5 p-6 rounded-2xl border-2 border-forest/10 bg-white hover:border-olive/30 hover:bg-olive/5 transition-all text-left group w-full"
-                            >
-                                <span className="text-4xl shrink-0">{game.emoji}</span>
-                                <div>
-                                    <h2 className="font-display font-black text-forest text-xl group-hover:text-olive transition-colors">
-                                        {game.label}
-                                    </h2>
-                                    <p className="text-sm text-forest/55 font-medium">{game.description}</p>
-                                </div>
-                            </button>
-                        ))}
+                        {GAMES.map((game) => {
+                            const Icon = game.icon;
+                            return (
+                                <button
+                                    key={game.type}
+                                    onClick={() => handleSelectGame(game.type)}
+                                    className="flex items-center gap-5 p-6 rounded-2xl border-2 border-forest/10 bg-white hover:border-olive/30 hover:bg-olive/5 transition-all text-left group w-full"
+                                >
+                                    <div className="w-12 h-12 rounded-xl bg-olive/10 flex items-center justify-center shrink-0">
+                                        <Icon className="w-6 h-6 text-olive" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-display font-black text-forest text-xl group-hover:text-olive transition-colors">
+                                            {game.label}
+                                        </h2>
+                                        <p className="text-sm text-forest/55 font-medium">{game.description}</p>
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
 
@@ -106,7 +110,9 @@ export default function Games() {
                 {activeGame === GameType.MAZE && user && (
                     <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <h2 className="font-display font-black text-forest text-lg">🌀 Goose Maze</h2>
+                            <h2 className="font-display font-black text-forest text-lg flex items-center gap-2">
+                                <Compass className="w-5 h-5 text-olive" /> Goose Maze
+                            </h2>
                             <button onClick={handleBack} className="text-sm text-forest/50 hover:text-forest font-medium">Back</button>
                         </div>
                         <div className="card p-4">
@@ -125,7 +131,9 @@ export default function Games() {
                 {activeGame === GameType.BREADCRUMB && socket && user && (
                     <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <h2 className="font-display font-black text-forest text-lg">🍞 Breadcrumb Tap</h2>
+                            <h2 className="font-display font-black text-forest text-lg flex items-center gap-2">
+                                <Wheat className="w-5 h-5 text-olive" /> Breadcrumb Tap
+                            </h2>
                             <button onClick={handleBack} className="text-sm text-forest/50 hover:text-forest font-medium">Back</button>
                         </div>
                         <div className="card p-6">
@@ -144,7 +152,9 @@ export default function Games() {
                 {activeGame === GameType.PICTIONARY && user && (
                     <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <h2 className="font-display font-black text-forest text-lg">🎨 Pictionary</h2>
+                            <h2 className="font-display font-black text-forest text-lg flex items-center gap-2">
+                                <PenLine className="w-5 h-5 text-olive" /> Pictionary
+                            </h2>
                             <button onClick={handleBack} className="text-sm text-forest/50 hover:text-forest font-medium">Back</button>
                         </div>
                         <div className="card p-5">
@@ -152,7 +162,6 @@ export default function Games() {
                                 userId={user.id}
                                 username={user.username || "Goose"}
                                 onGameEnd={async () => {
-                                    // Points are awarded server-side; refresh so navbar updates
                                     await refreshProfile();
                                     handleBack();
                                 }}
